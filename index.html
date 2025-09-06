@@ -316,11 +316,11 @@
                     const card = document.createElement('div');
                     card.className = 'meal-card bg-white p-6 rounded-xl shadow-lg';
                     card.innerHTML = `
-                        <div class="flex justify-between items-center mb-4">
+                         <div class="flex justify-between items-center mb-4">
                              <h2 class="text-2xl font-bold">${mealName}</h2>
                              <button class="remove-meal-section-btn text-red-500 hover:text-red-700 font-bold" data-meal-name="${mealName}">X</button>
-                        </div>
-                        <form class="meal-form" data-meal-name="${mealName}">
+                         </div>
+                         <form class="meal-form" data-meal-name="${mealName}">
                               <div class="mb-4">
                                   <label class="block text-sm font-medium text-gray-700">Food Item <span class="text-red-500">*</span></label>
                                   <input type="text" name="food" placeholder="e.g., Chicken Breast" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
@@ -334,21 +334,21 @@
                                   <div><label class="block text-sm font-medium">Protein (g)</label><input type="number" step="any" name="protein" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
                               </div>
                               <button type="submit" class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">Add Item</button>
-                        </form>
-                         <div class="meal-list mt-6 space-y-2">
-                             ${mealItems.map((item, index) => `
-                                 <div class="flex justify-between items-start p-2 rounded-md bg-gray-50">
-                                     <div>
-                                         <p class="font-semibold">${item.food}</p>
-                                         <p class="text-xs text-gray-500">
-                                             Cal: ${item.calories || 0} | P: ${item.protein || 0}g | C: ${item.carbs || 0}g | F: ${item.fat || 0}g
-                                         </p>
-                                     </div>
-                                     <button class="remove-meal-item-btn text-red-400 hover:text-red-600" data-meal-name="${mealName}" data-index="${index}">×</button>
-                                 </div>
-                             `).join('')}
-                         </div>
-                    `;
+                         </form>
+                          <div class="meal-list mt-6 space-y-2">
+                               ${mealItems.map((item, index) => `
+                                   <div class="flex justify-between items-start p-2 rounded-md bg-gray-50">
+                                       <div>
+                                           <p class="font-semibold">${item.food}</p>
+                                           <p class="text-xs text-gray-500">
+                                               Cal: ${item.calories || 0} | P: ${item.protein || 0}g | C: ${item.carbs || 0}g | F: ${item.fat || 0}g
+                                           </p>
+                                       </div>
+                                       <button class="remove-meal-item-btn text-red-400 hover:text-red-600" data-meal-name="${mealName}" data-index="${index}">×</button>
+                                   </div>
+                               `).join('')}
+                           </div>
+                     `;
                     mealContainer.appendChild(card);
                 });
             }
@@ -360,12 +360,12 @@
                     const workoutEl = document.createElement('div');
                     workoutEl.className = 'flex justify-between items-center p-2 rounded-md bg-gray-50';
                     workoutEl.innerHTML = `
-                        <div>
-                            <p class="font-semibold">${workout.type}</p>
-                            <p class="text-xs text-gray-500">${workout.calories} calories burned</p>
-                        </div>
-                        <button class="remove-workout-btn text-red-400 hover:text-red-600" data-id="${id}">×</button>
-                    `;
+                         <div>
+                             <p class="font-semibold">${workout.type}</p>
+                             <p class="text-xs text-gray-500">${workout.calories} calories burned</p>
+                         </div>
+                         <button class="remove-workout-btn text-red-400 hover:text-red-600" data-id="${id}">×</button>
+                     `;
                     workoutList.appendChild(workoutEl);
                 });
             }
@@ -487,7 +487,6 @@
                     mealNameInput.value = '';
                 }
             });
-            loadDataForDate(state.currentDate);
         }
     </script>
 </body>

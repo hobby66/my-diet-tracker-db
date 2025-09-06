@@ -68,6 +68,7 @@
         <header class="text-center mb-8">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Diet & Workout Tracker</h1>
             <p class="text-lg text-gray-600 mt-2">Log your meals and exercises to achieve your calorie deficit goals.</p>
+            <p id="user-email" class="text-sm text-gray-500 mt-2"></p>
             <button id="sign-out-btn" class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-300">Sign Out</button>
         </header>
 
@@ -190,17 +191,21 @@
         const authPasswordInput = document.getElementById('auth-password');
         const authErrorEl = document.getElementById('auth-error');
         const signOutBtn = document.getElementById('sign-out-btn');
+        const userEmailEl = document.getElementById('user-email');
 
         onAuthStateChanged(auth, user => {
             loadingOverlay.classList.add('hidden');
             if (user) {
                 userId = user.uid;
+                // Add this line to display the user's email.
+                userEmailEl.textContent = user.email || ''; 
                 appContent.classList.remove('hidden');
                 authOverlay.classList.add('hidden');
                 initializeAppLogic();
             } else {
                 appContent.classList.add('hidden');
                 authOverlay.classList.remove('hidden');
+                userEmailEl.textContent = '';
                 if (unsubscribeData) {
                     unsubscribeData();
                 }

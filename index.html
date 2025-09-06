@@ -322,11 +322,11 @@
                         </div>
                         <form class="meal-form" data-meal-name="${mealName}">
                               <div class="mb-4">
-                                  <label class="block text-sm font-medium text-gray-700">Food Item</label>
+                                  <label class="block text-sm font-medium text-gray-700">Food Item <span class="text-red-500">*</span></label>
                                   <input type="text" name="food" placeholder="e.g., Chicken Breast" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
                               </div>
                               <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-                                  <div><label class="block text-sm font-medium">Calories</label><input type="number" step="any" name="calories" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required></div>
+                                  <div><label class="block text-sm font-medium">Calories <span class="text-red-500">*</span></label><input type="number" step="any" name="calories" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required></div>
                                   <div><label class="block text-sm font-medium">Fat (g)</label><input type="number" step="any" name="fat" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
                                   <div><label class="block text-sm font-medium">Carbs (g)</label><input type="number" step="any" name="carbs" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
                                   <div><label class="block text-sm font-medium">Sugar (g)</label><input type="number" step="any" name="sugar" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
@@ -480,14 +480,13 @@
             cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
             confirmAddMealBtn.addEventListener('click', () => {
                 const mealName = mealNameInput.value.trim();
-                if(mealName && !state.meals[mealName]) {
+                if (mealName) {
                     state.meals[mealName] = [];
                     saveData();
+                    addMealModal.classList.add('hidden');
+                    mealNameInput.value = '';
                 }
-                addMealModal.classList.add('hidden');
-                mealNameInput.value = '';
             });
-            // Initial load
             loadDataForDate(state.currentDate);
         }
     </script>

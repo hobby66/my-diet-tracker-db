@@ -284,6 +284,7 @@
                     meals: state.meals,
                     workouts: state.workouts
                 }, { merge: true });
+                render(); // This is the new crucial part for immediate UI updates
             }
 
             async function saveBMR() {

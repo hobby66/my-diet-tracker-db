@@ -37,13 +37,11 @@
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
-
     <div id="loading-overlay" class="loading-overlay">
         <div class="spinner"></div>
         <p class="mt-4 text-gray-600">Connecting to your database...</p>
     </div>
 
-    <!-- Authentication UI -->
     <div id="auth-overlay" class="auth-overlay hidden">
         <div class="auth-container">
             <h2 id="auth-title" class="text-2xl font-bold mb-4">Log In</h2>
@@ -98,8 +96,7 @@
                  </div>
             </div>
         </section>
-        
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 space-y-6">
                 <div id="meal-container"></div>
                 <button id="add-meal-btn" class="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition duration-300">+ Add Meal Section</button>
@@ -127,8 +124,7 @@
                 </div>
             </div>
         </div>
-        
-        <section id="charts" class="mt-8">
+                <section id="charts" class="mt-8">
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div class="bg-white p-6 rounded-xl shadow-lg">
                     <h2 class="text-2xl font-bold mb-4 text-center">Weekly Summary</h2>
@@ -154,7 +150,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -261,15 +256,15 @@
             let monthlyChartInstance = null;
             let state = { currentDate: new Date().toISOString().split('T')[0] };
             const defaultMeals = ['Breakfast', 'Lunch', 'Dinner'];
-            
-            async function loadDataForDate(date) {
+
+            async function loadDataAndListen(date) {
                 if (unsubscribeData) unsubscribeData();
 
                 const settingsRef = doc(db, 'users', userId);
                 const settingsSnap = await getDoc(settingsRef);
                 const settingsData = settingsSnap.data() || {};
                 state.bmr = settingsData.bmr || 1232;
-                
+
                 const dataRef = doc(db, 'users', userId, 'dates', date);
                 unsubscribeData = onSnapshot(dataRef, (docSnap) => {
                     const data = docSnap.data() || {};
@@ -282,15 +277,15 @@
                     render();
                 });
             }
-            
+
             async function saveData() {
                 const docRef = doc(db, 'users', userId, 'dates', state.currentDate);
-                await setDoc(docRef, { 
-                    meals: state.meals, 
-                    workouts: state.workouts 
+                await setDoc(docRef, {
+                    meals: state.meals,
+                    workouts: state.workouts
                 }, { merge: true });
             }
-            
+
             async function saveBMR() {
                 const settingsRef = doc(db, 'users', userId);
                 await setDoc(settingsRef, { bmr: state.bmr }, { merge: true });
@@ -397,13 +392,13 @@
                 document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
                 document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
             }
-            
+
             async function renderWeeklyChart() {
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
                 if (weeklyChartInstance) weeklyChartInstance.destroy();
                 const today = new Date(state.currentDate + 'T00:00:00');
-                const dayOfWeek = today.getDay(); 
-                const startDate = new Date(today);
+                const dayOfWeek = today.getDay();
+                 const startDate = new Date(today);
                 startDate.setDate(today.getDate() - dayOfWeek);
                 const labels = [], data = [], backgroundColors = [];
                 for (let i = 0; i < 7; i++) {
@@ -467,15 +462,21 @@
                 if (typeInput.value && caloriesInput.value) { state.workouts[Date.now().toString()] = { type: typeInput.value, calories: caloriesInput.value }; saveData(); typeInput.value = ''; caloriesInput.value = ''; }
             });
             workoutList.addEventListener('click', (e) => { if (e.target.classList.contains('remove-workout-btn')) { delete state.workouts[e.target.dataset.id]; saveData(); } });
-            dateInput.addEventListener('change', () => { state.currentDate = dateInput.value; loadDataForDate(state.currentDate); });
+
+            // Updated Date Navigation Event Listeners
+            dateInput.addEventListener('change', () => {
+                state.currentDate = dateInput.value;
+                loadDataAndListen(state.currentDate);
+            });
             prevDayBtn.addEventListener('click', () => {
                 const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataForDate(state.currentDate);
+                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
             });
             nextDayBtn.addEventListener('click', () => {
                 const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataForDate(state.currentDate);
+                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
             });
+
             addMealBtn.addEventListener('click', () => addMealModal.classList.remove('hidden'));
             cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
             confirmAddMealBtn.addEventListener('click', () => {
@@ -487,6 +488,9 @@
                     mealNameInput.value = '';
                 }
             });
+
+            // Initial call to start the data loading and listening process
+            loadDataAndListen(state.currentDate);
         }
     </script>
 </body>

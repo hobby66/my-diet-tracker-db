@@ -344,154 +344,186 @@
                                `).join('')}
                            </div>
                      `;
-                    mealContainer.appendChild(card);
-                });
-            }
-
-            function renderWorkouts() {
-                workoutList.innerHTML = '';
-                 Object.keys(state.workouts).forEach((id) => {
-                    const workout = state.workouts[id];
-                    const workoutEl = document.createElement('div');
-                    workoutEl.className = 'flex justify-between items-center p-2 rounded-md bg-gray-50';
-                    workoutEl.innerHTML = `
-                         <div>
-                             <p class="font-semibold">${workout.type}</p>
-                             <p class="text-xs text-gray-500">${workout.calories} calories burned</p>
-                         </div>
-                         <button class="remove-workout-btn text-red-400 hover:text-red-600" data-id="${id}">×</button>
-                     `;
-                    workoutList.appendChild(workoutEl);
-                });
-            }
-            
-            function updateSummary() {
-                let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
-                Object.values(state.meals).flat().forEach(item => {
-                    totalCalsIn += Number(item.calories) || 0;
-                    totalProtein += Number(item.protein) || 0;
-                    totalCarbs += Number(item.carbs) || 0;
-                    totalFat += Number(item.fat) || 0;
-                    totalSugar += Number(item.sugar) || 0;
-                    totalFiber += Number(item.fiber) || 0;
-                });
-                const bmr = Number(state.bmr) || 0;
-                let totalCalsOut = bmr;
-                 Object.values(state.workouts).forEach(workout => { totalCalsOut += Number(workout.calories) || 0; });
-                const net = totalCalsIn - totalCalsOut;
-                document.getElementById('total-calories-in').textContent = totalCalsIn;
-                document.getElementById('total-calories-out').textContent = totalCalsOut;
-                document.getElementById('net-calories').textContent = net;
-                const statusEl = document.getElementById('calorie-status');
-                if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.className = 'text-2xl font-semibold text-green-600';
-                } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.className = 'text-2xl font-semibold text-orange-600';
-                } else { statusEl.textContent = 'Balanced'; statusEl.className = 'text-2xl font-semibold text-gray-800'; }
-                document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
-                document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
-                document.getElementById('total-fat').textContent = `${totalFat.toFixed(1)} g`;
-                document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
-                document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
-            }
-
-            async function renderWeeklyChart() {
-                const ctx = document.getElementById('weekly-chart').getContext('2d');
-                if (weeklyChartInstance) weeklyChartInstance.destroy();
-                const today = new Date(state.currentDate + 'T00:00:00');
-                const dayOfWeek = today.getDay();
-                 const startDate = new Date(today);
-                startDate.setDate(today.getDate() - dayOfWeek);
-                const labels = [], data = [], backgroundColors = [];
-                for (let i = 0; i < 7; i++) {
-                    const date = new Date(startDate); date.setDate(startDate.getDate() + i);
-                    const dateString = date.toISOString().split('T')[0];
-                    labels.push(date.toLocaleString(undefined, { weekday: 'short' }));
-                    const docRef = doc(db, 'users', userId, 'dates', dateString);
-                    const docSnap = await getDoc(docRef);
-                    const dayData = docSnap.data();
-                    const netCalories = dayData ? calculateDailyNet(dayData) : 0;
-                    data.push(netCalories);
-                    backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
-                }
-                weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
-            }
-
-            async function renderMonthlyChart() {
-                const ctx = document.getElementById('monthly-chart').getContext('2d');
-                if (monthlyChartInstance) monthlyChartInstance.destroy();
-                const today = new Date(state.currentDate + 'T00:00:00');
-                const year = today.getFullYear(), month = today.getMonth();
-                const endDate = new Date(year, month + 1, 0);
-                const labels = [], data = [], backgroundColors = [];
-                for (let i = 1; i <= endDate.getDate(); i++) {
-                    const date = new Date(year, month, i);
-                    const dateString = date.toISOString().split('T')[0];
-                    labels.push(i);
-                    const docRef = doc(db, 'users', userId, 'dates', dateString);
-                    const docSnap = await getDoc(docRef);
-                    const dayData = docSnap.data();
-                    const netCalories = dayData ? calculateDailyNet(dayData) : 0;
-                    data.push(netCalories);
-                    backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
-                }
-                monthlyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
-            }
-
-            function calculateDailyNet(dayData) {
-                const bmr = Number(state.bmr) || 0;
-                let calsIn = 0; if (dayData && dayData.meals) { calsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-                let exerciseCals = 0; if (dayData && dayData.workouts) { exerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-                return calsIn - (bmr + exerciseCals);
-            }
-
-            bmrInput.addEventListener('change', () => { state.bmr = Number(bmrInput.value) || 0; saveBMR(); render(); });
-            mealContainer.addEventListener('submit', (e) => {
-                if (e.target.classList.contains('meal-form')) {
-                    e.preventDefault(); const form = e.target; const mealName = form.dataset.mealName; const formData = new FormData(form);
-                    const mealItem = { food: formData.get('food'), calories: formData.get('calories'), protein: formData.get('protein'), carbs: formData.get('carbs'), fat: formData.get('fat'), sugar: formData.get('sugar'), fiber: formData.get('fiber') };
-                    if (!state.meals[mealName]) state.meals[mealName] = [];
-                    state.meals[mealName].push(mealItem);
-                    saveData(); form.reset();
-                }
+                mealContainer.appendChild(card);
             });
-            mealContainer.addEventListener('click', (e) => {
-                if (e.target.classList.contains('remove-meal-item-btn')) { state.meals[e.target.dataset.mealName].splice(e.target.dataset.index, 1); saveData(); }
-                if (e.target.classList.contains('remove-meal-section-btn')) { delete state.meals[e.target.dataset.mealName]; saveData(); }
-            });
-            workoutForm.addEventListener('submit', (e) => {
-                e.preventDefault(); const typeInput = document.getElementById('workout-type'); const caloriesInput = document.getElementById('calories-burned');
-                if (typeInput.value && caloriesInput.value) { state.workouts[Date.now().toString()] = { type: typeInput.value, calories: caloriesInput.value }; saveData(); typeInput.value = ''; caloriesInput.value = ''; }
-            });
-            workoutList.addEventListener('click', (e) => { if (e.target.classList.contains('remove-workout-btn')) { delete state.workouts[e.target.dataset.id]; saveData(); } });
-
-            // Updated Date Navigation Event Listeners
-            dateInput.addEventListener('change', () => {
-                state.currentDate = dateInput.value;
-                loadDataAndListen(state.currentDate);
-            });
-            prevDayBtn.addEventListener('click', () => {
-                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-            });
-            nextDayBtn.addEventListener('click', () => {
-                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-            });
-
-            addMealBtn.addEventListener('click', () => addMealModal.classList.remove('hidden'));
-            cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
-            confirmAddMealBtn.addEventListener('click', () => {
-                const mealName = mealNameInput.value.trim();
-                if (mealName) {
-                    state.meals[mealName] = [];
-                    saveData();
-                    addMealModal.classList.add('hidden');
-                    mealNameInput.value = '';
-                }
-            });
-
-            // Initial call to start the data loading and listening process
-            loadDataAndListen(state.currentDate);
         }
+
+        function renderWorkouts() {
+            workoutList.innerHTML = '';
+             Object.keys(state.workouts).forEach((id) => {
+                const workout = state.workouts[id];
+                const workoutEl = document.createElement('div');
+                workoutEl.className = 'flex justify-between items-center p-2 rounded-md bg-gray-50';
+                workoutEl.innerHTML = `
+                     <div>
+                         <p class="font-semibold">${workout.type}</p>
+                         <p class="text-xs text-gray-500">${workout.calories} calories burned</p>
+                     </div>
+                     <button class="remove-workout-btn text-red-400 hover:text-red-600" data-id="${id}">×</button>
+                 `;
+                workoutList.appendChild(workoutEl);
+            });
+        }
+
+        function updateSummary() {
+            let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
+            Object.values(state.meals).flat().forEach(item => {
+                totalCalsIn += Number(item.calories) || 0;
+                totalProtein += Number(item.protein) || 0;
+                totalCarbs += Number(item.carbs) || 0;
+                totalFat += Number(item.fat) || 0;
+                totalSugar += Number(item.sugar) || 0;
+                totalFiber += Number(item.fiber) || 0;
+            });
+            const bmr = Number(state.bmr) || 0;
+            let totalCalsOut = bmr;
+             Object.values(state.workouts).forEach(workout => { totalCalsOut += Number(workout.calories) || 0; });
+            const net = totalCalsIn - totalCalsOut;
+            document.getElementById('total-calories-in').textContent = totalCalsIn;
+            document.getElementById('total-calories-out').textContent = totalCalsOut;
+            document.getElementById('net-calories').textContent = net;
+            const statusEl = document.getElementById('calorie-status');
+            if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.className = 'text-2xl font-semibold text-green-600';
+            } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.className = 'text-2xl font-semibold text-orange-600';
+            } else { statusEl.textContent = 'Balanced'; statusEl.className = 'text-2xl font-semibold text-gray-800'; }
+            document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
+            document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
+            document.getElementById('total-fat').textContent = `${totalFat.toFixed(1)} g`;
+            document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
+            document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
+        }
+
+        async function renderWeeklyChart() {
+            const ctx = document.getElementById('weekly-chart').getContext('2d');
+            if (weeklyChartInstance) weeklyChartInstance.destroy();
+            const today = new Date(state.currentDate + 'T00:00:00');
+            const dayOfWeek = today.getDay();
+             const startDate = new Date(today);
+            startDate.setDate(today.getDate() - dayOfWeek);
+            const labels = [], data = [], backgroundColors = [];
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(startDate); date.setDate(startDate.getDate() + i);
+                const dateString = date.toISOString().split('T')[0];
+                labels.push(date.toLocaleString(undefined, { weekday: 'short' }));
+                const docRef = doc(db, 'users', userId, 'dates', dateString);
+                const docSnap = await getDoc(docRef);
+                const dayData = docSnap.data();
+                const netCalories = dayData ? calculateDailyNet(dayData) : 0;
+                data.push(netCalories);
+                backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
+            }
+            weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+        }
+
+        async function renderMonthlyChart() {
+            const ctx = document.getElementById('monthly-chart').getContext('2d');
+            if (monthlyChartInstance) monthlyChartInstance.destroy();
+            const today = new Date(state.currentDate + 'T00:00:00');
+            const year = today.getFullYear(), month = today.getMonth();
+            const endDate = new Date(year, month + 1, 0);
+            const labels = [], data = [], backgroundColors = [];
+            for (let i = 1; i <= endDate.getDate(); i++) {
+                const date = new Date(year, month, i);
+                const dateString = date.toISOString().split('T')[0];
+                labels.push(i);
+                const docRef = doc(db, 'users', userId, 'dates', dateString);
+                const docSnap = await getDoc(docRef);
+                const dayData = docSnap.data();
+                const netCalories = dayData ? calculateDailyNet(dayData) : 0;
+                data.push(netCalories);
+                backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
+            }
+            monthlyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+        }
+
+        function calculateDailyNet(dayData) {
+            const bmr = Number(state.bmr) || 0;
+            let calsIn = 0; if (dayData && dayData.meals) { calsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
+            let exerciseCals = 0; if (dayData && dayData.workouts) { exerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
+            return calsIn - (bmr + exerciseCals);
+        }
+
+        bmrInput.addEventListener('change', () => { state.bmr = Number(bmrInput.value) || 0; saveBMR(); render(); });
+        mealContainer.addEventListener('submit', (e) => {
+            if (e.target.classList.contains('meal-form')) {
+                e.preventDefault();
+                const form = e.target;
+                const mealName = form.dataset.mealName;
+                const formData = new FormData(form);
+
+                const mealItem = {
+                    food: formData.get('food'),
+                    calories: Number(formData.get('calories')) || 0,
+                    protein: Number(formData.get('protein')) || 0,
+                    carbs: Number(formData.get('carbs')) || 0,
+                    fat: Number(formData.get('fat')) || 0,
+                    sugar: Number(formData.get('sugar')) || 0,
+                    fiber: Number(formData.get('fiber')) || 0
+                };
+
+                if (!state.meals[mealName]) {
+                    state.meals[mealName] = [];
+                }
+                state.meals[mealName].push(mealItem);
+                saveData();
+                form.reset();
+            }
+        });
+        mealContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-meal-item-btn')) {
+                state.meals[e.target.dataset.mealName].splice(e.target.dataset.index, 1);
+                saveData();
+            }
+            if (e.target.classList.contains('remove-meal-section-btn')) {
+                delete state.meals[e.target.dataset.mealName];
+                saveData();
+            }
+        });
+        workoutForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const typeInput = document.getElementById('workout-type');
+            const caloriesInput = document.getElementById('calories-burned');
+            if (typeInput.value && caloriesInput.value) {
+                state.workouts[Date.now().toString()] = { type: typeInput.value, calories: Number(caloriesInput.value) || 0 };
+                saveData();
+                typeInput.value = '';
+                caloriesInput.value = '';
+            }
+        });
+        workoutList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-workout-btn')) {
+                delete state.workouts[e.target.dataset.id];
+                saveData();
+            }
+        });
+
+        dateInput.addEventListener('change', () => {
+            state.currentDate = dateInput.value;
+            loadDataAndListen(state.currentDate);
+        });
+        prevDayBtn.addEventListener('click', () => {
+            const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
+            state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
+        });
+        nextDayBtn.addEventListener('click', () => {
+            const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
+            state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
+        });
+
+        addMealBtn.addEventListener('click', () => addMealModal.classList.remove('hidden'));
+        cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
+        confirmAddMealBtn.addEventListener('click', () => {
+            const mealName = mealNameInput.value.trim();
+            if (mealName) {
+                state.meals[mealName] = [];
+                saveData();
+                addMealModal.classList.add('hidden');
+                mealNameInput.value = '';
+            }
+        });
+
+        loadDataAndListen(state.currentDate);
+    }
     </script>
 </body>
 </html>

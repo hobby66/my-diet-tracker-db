@@ -179,10 +179,6 @@
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div class="card p-4">
                     <h3 class="text-xl font-bold mb-3 text-center text-gray-700">Weekly Net Calories</h3>
-                    <div class="text-center mb-4">
-                        <p class="text-gray-500 text-sm">Total Net for Week (Mon - Sun):</p>
-                        <p id="weekly-net-total" class="text-2xl font-bold text-gray-800">0 Cal</p>
-                    </div>
                     <canvas id="weekly-chart"></canvas>
                 </div>
                 <div class="card p-4">
@@ -489,27 +485,6 @@
                 }
             }
 
-            function calculateDailyNet(data) {
-                let totalCalsIn = 0;
-                let totalCalsOut = Number(state.bmr) || 0;
-
-                // Calories In
-                if (data.meals) {
-                    Object.values(data.meals).flat().forEach(item => {
-                        totalCalsIn += Number(item.calories) || 0;
-                    });
-                }
-
-                // Calories Out from Workouts
-                if (data.workouts) {
-                    Object.values(data.workouts).forEach(workout => {
-                        totalCalsOut += Number(workout.calories) || 0;
-                    });
-                }
-                
-                return totalCalsIn - totalCalsOut;
-            }
-
             function updateSummary() {
                 let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
                 Object.values(state.meals).flat().forEach(item => {
@@ -531,16 +506,9 @@
 
                 const statusEl = document.getElementById('calorie-status');
                 statusEl.classList.remove('text-primary', 'text-orange-600', 'text-gray-800');
-                if (net < 0) { 
-                    statusEl.textContent = 'Deficit'; 
-                    statusEl.classList.add('text-primary'); 
-                } else if (net > 0) { 
-                    statusEl.textContent = 'Surplus'; 
-                    statusEl.classList.add('text-orange-600'); 
-                } else { 
-                    statusEl.textContent = 'Even'; 
-                    statusEl.classList.add('text-gray-800'); 
-                }
+                if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.classList.add('text-primary');
+                } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.classList.add('text-orange-600');
+                } else { statusEl.textContent = 'Balanced'; statusEl.classList.add('text-gray-800'); }
 
                 document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
                 document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
@@ -548,179 +516,213 @@
                 document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
                 document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
             }
+            
+            // --- Chart & Monthly Logic Stubs ---
 
-            async function renderWeeklyChart() {
-                const ctx = document.getElementById('weekly-chart').getContext('2d');
-                if (weeklyChartInstance) weeklyChartInstance.destroy();
+            async function fetchMonthlyData() {
+                const datesRef = collection(db, 'users', userId, 'dates');
+                // Note: Firestore doesn't allow querying by month/year directly without composite indexes
+                // For a real app, you'd query the whole year and filter/aggregate locally.
+                // We'll use a simplified full fetch for now.
+                const q = query(datesRef);
+                const querySnapshot = await getDocs(q);
+                
+                const monthlyData = {};
+                querySnapshot.forEach(doc => {
+                    const date = doc.id; // YYYY-MM-DD
+                    const [year, month, day] = date.split('-').map(Number);
+                    if (year === state.selectedYear && month - 1 === state.selectedMonth) { // month is 0-indexed in state, 1-indexed in date string
+                        const data = doc.data();
+                        
+                        let totalCalsIn = 0;
+                        Object.values(data.meals || {}).flat().forEach(item => {
+                            totalCalsIn += Number(item.calories) || 0;
+                        });
+                        
+                        let totalCalsOut = state.bmr || 0;
+                        Object.values(data.workouts || {}).forEach(workout => { totalCalsOut += Number(workout.calories) || 0; });
 
-                const today = new Date(state.currentDate + 'T00:00:00');
-                let dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-                
-                // *** MONDAY START LOGIC ***
-                // Adjust to make Monday=0, Tuesday=1, ..., Sunday=6 for subtraction
-                // If today is Sunday (0), we want to subtract 6 days to get the previous Monday.
-                // Otherwise (Mon-Sat), we subtract dayOfWeek - 1 to get Monday.
-                dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1; 
-                
-                const startDate = new Date(today);
-                // Subtract the adjusted index to land on Monday
-                startDate.setDate(today.getDate() - dayOfWeek);
-                
-                const labels = [], data = [], backgroundColors = [];
-                let weeklyNetTotal = 0; // Initialize weekly total
-                
-                for (let i = 0; i < 7; i++) {
-                    const date = new Date(startDate); 
-                    date.setDate(startDate.getDate() + i);
-                    const dateString = date.toISOString().split('T')[0];
-
-                    // Labels will now correctly show Mon, Tue, Wed, etc., starting from Monday
-                    labels.push(date.toLocaleString(undefined, { weekday: 'short' })); 
-
-                    const docRef = doc(db, 'users', userId, 'dates', dateString);
-                    const docSnap = await getDoc(docRef);
-                    const dayData = docSnap.data();
-                    const netCalories = dayData ? calculateDailyNet(dayData) : 0;
-                    data.push(netCalories);
-                    weeklyNetTotal += netCalories; // Add daily net to the weekly total
-                    // Use different colors for surplus/deficit
-                    backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
-                }
-
-                // Update the weekly net calories display
-                const weeklyTotalEl = document.getElementById('weekly-net-total');
-                weeklyTotalEl.textContent = `${weeklyNetTotal.toFixed(0)} Cal`;
-                weeklyTotalEl.classList.remove('text-green-600', 'text-red-600', 'text-gray-800');
-                if (weeklyNetTotal < 0) { weeklyTotalEl.classList.add('text-green-600'); }
-                else if (weeklyNetTotal > 0) { weeklyTotalEl.classList.add('text-red-600'); }
-                else { weeklyTotalEl.classList.add('text-gray-800'); }
-                
-                weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+                        monthlyData[day] = {
+                            net: totalCalsIn - totalCalsOut
+                        };
+                    }
+                });
+                return monthlyData;
             }
 
             async function renderMonthlySummaryBar() {
-                // Placeholder - can be expanded to fetch all data for the month
-                monthlyNetEl.textContent = `0 Cal`;
-                monthlyStatusLabelEl.textContent = `Total Calorie Balance for ${monthSelect.options[state.selectedMonth].text} ${state.selectedYear}`;
+                const data = await fetchMonthlyData();
+                let netSum = 0;
+                Object.values(data).forEach(day => netSum += day.net);
+                
+                monthlyNetEl.textContent = netSum;
+                
+                monthlyStatusLabelEl.textContent = `Total Calorie Balance for ${monthSelect.options[state.selectedMonth].textContent} ${state.selectedYear}`;
+                monthlyNetEl.classList.remove('text-primary', 'text-orange-600', 'text-gray-800');
+                if (netSum < 0) { monthlyNetEl.classList.add('text-primary'); } 
+                else if (netSum > 0) { monthlyNetEl.classList.add('text-orange-600'); }
+                else { monthlyNetEl.classList.add('text-gray-800'); }
+            }
+
+            function renderWeeklyChart() {
+                // Placeholder for weekly chart logic - requires weekly data fetch 
+                const ctx = document.getElementById('weekly-chart').getContext('2d');
+                if (weeklyChartInstance) { weeklyChartInstance.destroy(); }
+                weeklyChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        datasets: [{
+                            label: 'Net Calories',
+                            data: [0, 0, 0, 0, 0, 0, 0], // Placeholder data
+                            backgroundColor: primaryColor,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+
+                const macroCtx = document.getElementById('macro-chart').getContext('2d');
+                if (macroChartInstance) { macroChartInstance.destroy(); }
+                macroChartInstance = new Chart(macroCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Protein', 'Carbs', 'Fat'],
+                        datasets: [{
+                            data: [100, 100, 50], // Placeholder data
+                            backgroundColor: ['#4299e1', '#f6ad55', '#48bb78'],
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { position: 'top' } }
+                    }
+                });
             }
 
             // --- Event Listeners ---
-            
-            // Meal Item/Section Removal delegation
-            mealContainer.addEventListener('click', (e) => {
-                if (e.target.closest('.remove-meal-item-btn')) {
-                    const btn = e.target.closest('.remove-meal-item-btn');
-                    const mealName = btn.getAttribute('data-meal-name');
-                    const index = parseInt(btn.getAttribute('data-index'));
-                    if (state.meals[mealName] && state.meals[mealName].length > index) {
-                        state.meals[mealName].splice(index, 1);
-                        saveData();
-                    }
-                } else if (e.target.closest('.remove-meal-section-btn')) {
-                    const btn = e.target.closest('.remove-meal-section-btn');
-                    const mealName = btn.getAttribute('data-meal-name');
-                    if(defaultMeals.includes(mealName)) {
-                        alert(`Cannot delete default meal section: ${mealName}.`);
-                        return;
-                    }
-                    if (confirm(`Are you sure you want to delete the entire '${mealName}' section and all its items?`)) {
-                        delete state.meals[mealName];
-                        saveData();
-                    }
-                }
-            });
 
-            // Meal Form Submission delegation
-            mealContainer.addEventListener('submit', (e) => {
-                if (e.target.classList.contains('meal-form')) {
-                    e.preventDefault();
-                    const form = e.target;
-                    const mealName = form.getAttribute('data-meal-name');
-                    const newItem = {
-                        food: form.elements['food'].value,
-                        calories: parseFloat(form.elements['calories'].value) || 0,
-                        protein: parseFloat(form.elements['protein'].value) || 0,
-                        carbs: parseFloat(form.elements['carbs'].value) || 0,
-                        fat: parseFloat(form.elements['fat'].value) || 0,
-                        sugar: parseFloat(form.elements['sugar'].value) || 0,
-                        fiber: parseFloat(form.elements['fiber'].value) || 0,
-                    };
-
-                    if (!state.meals[mealName]) { state.meals[mealName] = []; }
-                    state.meals[mealName].push(newItem);
-                    form.reset();
-                    saveData();
-                }
-            });
-
-            // Workout Form Submission
-            workoutForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const workoutType = document.getElementById('workout-type').value;
-                const caloriesBurned = parseInt(document.getElementById('calories-burned').value);
-
-                if (workoutType && caloriesBurned > 0) {
-                    const id = Date.now().toString(); // Simple unique ID
-                    state.workouts[id] = { type: workoutType, calories: caloriesBurned };
-                    workoutForm.reset();
-                    saveData();
-                }
-            });
-
-            // Workout Removal
-            workoutList.addEventListener('click', (e) => {
-                if (e.target.closest('.remove-workout-btn')) {
-                    const id = e.target.closest('.remove-workout-btn').getAttribute('data-id');
-                    delete state.workouts[id];
-                    saveData();
-                }
-            });
-
-            // BMR Change
             bmrInput.addEventListener('change', saveBMR);
-            bmrInput.addEventListener('blur', saveBMR);
 
-            // Date navigation functions
-            function changeDate(days) {
-                const newDate = new Date(state.currentDate + 'T00:00:00');
-                newDate.setDate(newDate.getDate() + days);
-                state.currentDate = newDate.toISOString().split('T')[0];
-                loadDataAndListen(state.currentDate);
-            }
-
-            prevDayBtn.addEventListener('click', () => changeDate(-1));
-            nextDayBtn.addEventListener('click', () => changeDate(1));
             dateInput.addEventListener('change', (e) => {
                 state.currentDate = e.target.value;
                 loadDataAndListen(state.currentDate);
             });
 
-            // Add Meal Modal Handlers
+            prevDayBtn.addEventListener('click', () => {
+                const date = new Date(state.currentDate);
+                date.setDate(date.getDate() - 1);
+                state.currentDate = date.toISOString().split('T')[0];
+                loadDataAndListen(state.currentDate);
+            });
+
+            nextDayBtn.addEventListener('click', () => {
+                const date = new Date(state.currentDate);
+                date.setDate(date.getDate() + 1);
+                state.currentDate = date.toISOString().split('T')[0];
+                loadDataAndListen(state.currentDate);
+            });
+
+            workoutForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const type = document.getElementById('workout-type').value;
+                const calories = document.getElementById('calories-burned').value;
+                const newId = Date.now().toString();
+
+                if (type && calories > 0) {
+                    state.workouts[newId] = { type, calories: Number(calories) };
+                    await saveData();
+                    workoutForm.reset();
+                }
+            });
+
+            // Delegated event listener for dynamically added elements
+            appContent.addEventListener('click', async (e) => {
+                // Remove Workout
+                if (e.target.closest('.remove-workout-btn')) {
+                    const btn = e.target.closest('.remove-workout-btn');
+                    const id = btn.getAttribute('data-id');
+                    delete state.workouts[id];
+                    await saveData();
+                }
+                // Remove Meal Item
+                else if (e.target.closest('.remove-meal-item-btn')) {
+                    const btn = e.target.closest('.remove-meal-item-btn');
+                    const mealName = btn.getAttribute('data-meal-name');
+                    const index = Number(btn.getAttribute('data-index'));
+                    state.meals[mealName].splice(index, 1);
+                    await saveData();
+                }
+                // Remove Meal Section
+                else if (e.target.closest('.remove-meal-section-btn')) {
+                    const btn = e.target.closest('.remove-meal-section-btn');
+                    const mealName = btn.getAttribute('data-meal-name');
+                    if (confirm(`Are you sure you want to delete the entire "${mealName}" section?`)) {
+                        delete state.meals[mealName];
+                        await saveData();
+                    }
+                }
+            });
+
+            // Delegated event listener for Meal Forms
+            mealContainer.addEventListener('submit', async (e) => {
+                if (e.target.classList.contains('meal-form')) {
+                    e.preventDefault();
+                    const form = e.target;
+                    const mealName = form.getAttribute('data-meal-name');
+                    const formData = new FormData(form);
+                    
+                    const newItem = {
+                        food: formData.get('food'),
+                        calories: Number(formData.get('calories')) || 0,
+                        protein: Number(formData.get('protein')) || 0,
+                        carbs: Number(formData.get('carbs')) || 0,
+                        fat: Number(formData.get('fat')) || 0,
+                        sugar: Number(formData.get('sugar')) || 0,
+                        fiber: Number(formData.get('fiber')) || 0,
+                    };
+
+                    if (!state.meals[mealName]) { state.meals[mealName] = []; }
+                    state.meals[mealName].push(newItem);
+                    await saveData();
+                    form.reset();
+                }
+            });
+
+            // --- Modal Logic ---
+
             addMealBtn.addEventListener('click', () => {
                 mealNameInput.value = '';
                 addMealModal.classList.remove('hidden');
             });
+
             cancelAddMealBtn.addEventListener('click', () => {
                 addMealModal.classList.add('hidden');
             });
-            confirmAddMealBtn.addEventListener('click', () => {
+
+            confirmAddMealBtn.addEventListener('click', async () => {
                 const mealName = mealNameInput.value.trim();
-                if (mealName && !state.meals.hasOwnProperty(mealName)) {
+                if (mealName && !state.meals[mealName]) {
                     state.meals[mealName] = [];
+                    await saveData();
                     addMealModal.classList.add('hidden');
-                    saveData();
-                } else if (state.meals.hasOwnProperty(mealName)) {
-                    alert('A meal section with that name already exists.');
+                } else if (state.meals[mealName]) {
+                    alert('A meal section with that name already exists!');
+                } else {
+                    alert('Please enter a name for the new meal section.');
                 }
             });
 
-            // Monthly Select Handlers (for future development)
+            // Monthly Select Listeners
             monthSelect.addEventListener('change', (e) => {
-                state.selectedMonth = parseInt(e.target.value);
+                state.selectedMonth = Number(e.target.value);
                 renderMonthlySummaryBar();
             });
+
             yearSelect.addEventListener('change', (e) => {
-                state.selectedYear = parseInt(e.target.value);
+                state.selectedYear = Number(e.target.value);
                 renderMonthlySummaryBar();
             });
         }

@@ -1,634 +1,604 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloud-Synced Diet & Workout Tracker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .loading-overlay, .auth-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(249, 250, 251, 0.9);
-            display: flex; justify-content: center; align-items: center; z-index: 100;
-            flex-direction: column;
-            backdrop-filter: blur(4px);
-        }
-        .auth-container {
-            background: white; padding: 2.5rem; border-radius: 1rem; box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-            width: 90%; max-width: 400px; text-align: center;
-        }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 36px; height: 36px; border-radius: 50%;
-            border-left-color: #3b82f6; /* Blue 500 */
-            animation: spin 1s ease infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .meal-card, .workout-card, .summary-card { transition: all 0.3s ease-in-out; }
-        .meal-card:hover, .workout-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
-        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 50; }
-        .modal-content { background-color: white; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); width: 90%; max-width: 500px; }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud-Synced Diet & Workout Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Define a custom color for the theme (Teal-Green) */
+        :root { --color-primary: #14b8a6; /* teal-500 */ }
+        body { font-family: 'Inter', sans-serif; }
+        .loading-overlay, .auth-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(249, 250, 251, 0.95);
+            display: flex; justify-content: center; align-items: center; z-index: 100;
+            flex-direction: column; backdrop-filter: blur(8px);
+        }
+        .auth-container {
+            background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            width: 90%; max-width: 440px; text-align: center; border-top: 4px solid var(--color-primary);
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px; height: 36px; border-radius: 50%;
+            border-left-color: var(--color-primary);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Consistent card style */
+        .card { transition: all 0.2s ease-in-out; border-left: 5px solid transparent; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06); }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .meal-list-item { transition: background-color 0.2s; }
+        .meal-list-item:hover { background-color: #f3f4f6; }
+        .focus-ring-primary:focus { --tw-ring-color: var(--color-primary) !important; border-color: var(--color-primary) !important; }
+        .bg-primary { background-color: var(--color-primary); }
+        .hover-bg-primary:hover { background-color: #0d9488; /* teal-600 */ }
+        .text-primary { color: var(--color-primary); }
+    </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
-    <div id="loading-overlay" class="loading-overlay">
-        <div class="spinner"></div>
-        <p class="mt-4 text-gray-600">Connecting to your database...</p>
-    </div>
+<body class="bg-gray-100 text-gray-800">
 
-    <div id="auth-overlay" class="auth-overlay hidden">
-        <div class="auth-container">
-            <h2 id="auth-title" class="text-2xl font-bold mb-4">Log In</h2>
-            <p class="text-gray-600 mb-6">Create an account or log in to track your progress.</p>
-            <form id="auth-form">
-                <div class="mb-4 text-left">
-                    <label for="auth-email" class="block text-sm font-medium text-gray-700">Email</label>
-                    <input type="email" id="auth-email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <div class="mb-6 text-left">
-                    <label for="auth-password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" id="auth-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <div id="auth-error" class="text-red-500 text-sm mb-4"></div>
-                <button type="submit" id="auth-submit" class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">Log In</button>
-            </form>
-            <button id="auth-toggle" class="mt-4 text-sm text-blue-500 hover:underline">Don't have an account? Sign Up</button>
-        </div>
-    </div>
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p class="mt-4 text-xl font-semibold text-gray-700">Connecting to your cloud...</p>
+    </div>
 
-    <div id="app-content" class="container mx-auto p-4 md:p-8 max-w-6xl hidden">
-        <header class="text-center **mb-6**">
-            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Diet & Workout Tracker</h1>
-            <p class="text-lg text-gray-600 mt-2">Log your meals and exercises to achieve your calorie deficit goals.</p>
-            <button id="sign-out-btn" class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-300">Sign Out</button>
-        </header>
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="auth-container">
+            <h2 id="auth-title" class="text-3xl font-extrabold mb-3 text-gray-900">Log In</h2>
+            <p class="text-gray-500 mb-4">Securely manage your fitness data.</p>
+            <form id="auth-form">
+                <div class="mb-4 text-left">
+                    <label for="auth-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="auth-email" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus-ring-primary">
+                </div>
+                <div class="mb-4 text-left">
+                    <label for="auth-password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="auth-password" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus-ring-primary">
+                </div>
+                <div id="auth-error" class="text-red-500 text-sm mb-4"></div>
+                <button type="submit" id="auth-submit" class="w-full bg-primary text-white font-bold py-3 px-4 rounded-lg hover-bg-primary transition duration-300 shadow-md">Log In</button>
+            </form>
+            <button id="auth-toggle" class="mt-4 text-sm text-primary hover:underline font-medium">Don't have an account? Sign Up</button>
+        </div>
+    </div>
 
-        <div id="date-selector" class="flex justify-center items-center **mb-6** bg-white p-3 rounded-lg shadow-md max-w-md mx-auto">
-             <button id="prev-day" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">-</button>
-             <input type="date" id="current-date" class="border-0 text-center text-lg font-semibold focus:ring-0">
-             <button id="next-day" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">+</button>
-        </div>
+    <div id="app-content" class="container mx-auto p-4 md:p-8 max-w-7xl hidden">
+        
+        <header class="flex flex-col md:flex-row justify-between items-center mb-4 card bg-white p-4">
+            <div class="text-center md:text-left mb-4 md:mb-0">
+                <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-900">Fitness Dashboard</h1>
+                <p class="text-md text-gray-500 mt-1">Track your progress toward your goals.</p>
+            </div>
+            <div id="date-selector" class="flex items-center space-x-2">
+                <button id="prev-day" class="p-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition duration-150"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button>
+                <input type="date" id="current-date" class="border-0 bg-transparent text-center text-lg font-semibold text-gray-800 focus:ring-0 cursor-pointer p-2">
+                <button id="next-day" class="p-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition duration-150"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>
+            </div>
+            <button id="sign-out-btn" class="mt-4 md:mt-0 px-4 py-2 bg-pink-500 text-white rounded-lg font-medium hover:bg-pink-600 transition duration-300 shadow-md">Sign Out</button>
+        </header>
 
-                <section id="monthly-summary-bar" class="**mb-6**">
-            <div class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-2xl font-bold mb-4 text-center">Monthly Calorie Balance</h2>
-                <div class="flex justify-center items-center space-x-4 mb-6">
-                    <select id="month-select" class="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"></select>
-                    <select id="year-select" class="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"></select>
-                </div>
-                <div class="text-center">
-                    <p id="monthly-status-label" class="text-gray-500 text-sm mb-2">Total Calorie Balance for Selected Month</p>
-                    <p id="monthly-net-calories" class="text-3xl font-bold text-gray-800">0</p>
-                </div>
-            </div>
-        </section>
+        <section id="summary" class="mb-4">
+            <div class="summary-card card bg-white p-4">
+                <h2 class="text-xl font-bold mb-4 text-gray-800 border-b border-gray-200 pb-2">Daily Calorie & Macro Goals</h2>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center mb-4">
+                    <div class="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                        <p class="text-blue-600 text-sm font-medium">Calories In</p>
+                        <p id="total-calories-in" class="text-2xl font-extrabold text-blue-700 mt-1">0</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-red-50 border border-red-200">
+                        <p class="text-red-600 text-sm font-medium">Calories Out</p>
+                        <p id="total-calories-out" class="text-2xl font-extrabold text-red-700 mt-1">0</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-gray-50 border border-gray-200 col-span-2 md:col-span-1">
+                        <p class="text-gray-600 text-sm font-medium">Net Balance</p>
+                        <p id="net-calories" class="text-2xl font-extrabold text-gray-800 mt-1">0</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-primary/10 border border-primary/30 col-span-2 md:col-span-1">
+                        <p class="text-primary text-sm font-medium">Status</p>
+                        <p id="calorie-status" class="text-2xl font-extrabold text-primary mt-1">-</p>
+                    </div>
+                </div>
 
-        <section id="summary" class="**mb-6**">
-            <div class="summary-card bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-2xl font-bold mb-4 text-center">Daily Summary</h2>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                    <div><p class="text-gray-500 text-sm">Calories In</p><p id="total-calories-in" class="text-2xl font-semibold text-blue-600">0</p></div>
-                    <div><p class="text-gray-500 text-sm">Calories Out</p><p id="total-calories-out" class="text-2xl font-semibold text-red-600">0</p></div>
-                    <div><p class="text-gray-500 text-sm">Net Balance</p><p id="net-calories" class="text-2xl font-semibold text-gray-800">0</p></div>
-                    <div><p class="text-gray-500 text-sm">Status</p><p id="calorie-status" class="text-2xl font-semibold text-gray-800">-</p></div>
-                </div>
-                 <div class="mt-6">
-                     <h3 class="text-lg font-semibold text-center mb-3">Macro Breakdown</h3>
-                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-                          <div><p class="text-gray-500 text-sm">Protein</p><p id="total-protein" class="font-medium">0 g</p></div>
-                          <div><p class="text-gray-500 text-sm">Carbs</p><p id="total-carbs" class="font-medium">0 g</p></div>
-                          <div><p class="text-gray-500 text-sm">Fat</p><p id="total-fat" class="font-medium">0 g</p></div>
-                          <div><p class="text-gray-500 text-sm">Sugar</p><p id="total-sugar" class="font-medium">0 g</p></div>
-                          <div><p class="text-gray-500 text-sm">Fiber</p><p id="total-fiber" class="font-medium">0 g</p></div>
-                     </div>
-                 </div>
-            </div>
-        </section>
-        
-                <div class="grid grid-cols-1 lg:grid-cols-3 **gap-6**">
-            <div class="lg:col-span-2 space-y-4">                 <div id="meal-container"></div>
-                <button id="add-meal-btn" class="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition duration-300">+ Add Meal Section</button>
-            </div>
-            <div class="space-y-4">                 <div class="workout-card bg-white p-6 rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold mb-4">Workouts & BMR</h2>
-                    <div class="mb-4">
-                        <label for="bmr-input" class="block text-sm font-medium text-gray-700">Basal Metabolic Rate (BMR)</label>
-                        <input type="number" id="bmr-input" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                    </div>
-                    <hr class="my-6">
-                    <form id="workout-form">
-                        <div class="mb-4">
-                            <label for="workout-type" class="block text-sm font-medium text-gray-700">Workout Type</label>
-                            <input type="text" id="workout-type" placeholder="e.g., Rope Jumping" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <div class="mb-4">
-                            <label for="calories-burned" class="block text-sm font-medium text-gray-700">Calories Burned (Exercise)</label>
-                            <input type="number" id="calories-burned" placeholder="150" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
-                        <button type="submit" class="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300">Add Workout</button>
-                    </form>
-                    <div id="workout-list" class="mt-6 space-y-2"></div>
-                </div>
-            </div>
-        </div>
-                <section id="charts" class="**mt-6**">             <div class="grid grid-cols-1 xl:grid-cols-2 **gap-6**">                 <div class="bg-white p-6 rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold mb-4 text-center">Weekly Summary</h2>
-                    <canvas id="weekly-chart"></canvas>
-                </div>
-            </div>
-        </section>
-    </div>
+                <div class="mt-4 border-t border-gray-200 pt-4">
+                    <h3 class="text-lg font-bold text-center mb-3 text-gray-800">Macro Breakdown</h3>
+                    <div class="grid grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+                        <div class="p-2 bg-gray-50 rounded-md"><p class="text-gray-500 text-xs">Protein</p><p id="total-protein" class="font-bold text-base text-gray-800 mt-1">0 g</p></div>
+                        <div class="p-2 bg-gray-50 rounded-md"><p class="text-gray-500 text-xs">Carbs</p><p id="total-carbs" class="font-bold text-base text-gray-800 mt-1">0 g</p></div>
+                        <div class="p-2 bg-gray-50 rounded-md"><p class="text-gray-500 text-xs">Fat</p><p id="total-fat" class="font-bold text-base text-gray-800 mt-1">0 g</p></div>
+                        <div class="p-2 bg-gray-50 rounded-md hidden lg:block"><p class="text-gray-500 text-xs">Sugar</p><p id="total-sugar" class="font-bold text-base text-gray-800 mt-1">0 g</p></div>
+                        <div class="p-2 bg-gray-50 rounded-md hidden lg:block"><p class="text-gray-500 text-xs">Fiber</p><p id="total-fiber" class="font-bold text-base text-gray-800 mt-1">0 g</p></div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-    <div id="add-meal-modal" class="modal-backdrop hidden">
-        <div class="modal-content">
-            <h3 class="text-xl font-bold mb-4">Add a New Meal Section</h3>
-            <label for="meal-name-input" class="block text-sm font-medium text-gray-700">Meal Name</label>
-            <input type="text" id="meal-name-input" placeholder="e.g., Afternoon Snack" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-            <div class="mt-6 flex justify-end space-x-3">
-                <button id="cancel-add-meal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
-                <button id="confirm-add-meal" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Add</button>
-            </div>
-        </div>
-    </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            
+            <div class="lg:col-span-2 space-y-4">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2 border-b border-gray-200 pb-2">Meal Entries</h2>
+                <div id="meal-container">
+                    </div>
+                <button id="add-meal-btn" class="w-full bg-primary text-white font-bold py-2 px-3 rounded-lg hover-bg-primary transition duration-300 shadow-md flex items-center justify-center space-x-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Add New Meal Section</span>
+                </button>
+            </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+            <div class="space-y-4">
+                <div class="workout-card card bg-white p-4 border-left border-red-500">
+                    <h2 class="text-xl font-bold mb-4 text-gray-800 border-b border-gray-200 pb-2">Workouts & BMR</h2>
+                    
+                    <div class="mb-4">
+                        <label for="bmr-input" class="block text-sm font-medium text-gray-700">Basal Metabolic Rate (BMR)</label>
+                        <input type="number" id="bmr-input" class="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary" placeholder="e.g., 1500" min="1">
+                        <p class="text-xs text-gray-400 mt-1">**BMR is your base Calorie Out.**</p>
+                    </div>
 
-        // Your specific Firebase configuration has been added here.
-        const firebaseConfig = {
-            apiKey: "AIzaSyBHzCIwUR5ncIA8-Hx9nNYbIu4V2EffZVQ",
-            authDomain: "my-diet-tracker-db.firebaseapp.com",
-            projectId: "my-diet-tracker-db",
-            storageBucket: "my-diet-tracker-db.appspot.com",
-            messagingSenderId: "564828202506",
-            appId: "1:564828202506:web:caa54e9668d6a4f62ca1f3",
-            measurementId: "G-4JQRXJWPEG"
-        };
+                    <hr class="my-4 border-gray-200">
+                    
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Log Exercise</h3>
+                    <form id="workout-form" class="space-y-3">
+                        <input type="text" id="workout-type" placeholder="Workout Type (e.g., Running)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary" required>
+                        <input type="number" id="calories-burned" placeholder="Calories Burned (e.g., 300)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary" min="1" required>
+                        <button type="submit" class="w-full bg-red-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-red-600 transition duration-300">Add Workout Burn</button>
+                    </form>
+                    
+                    <div id="workout-list" class="mt-4 space-y-3 border-t border-gray-200 pt-4">
+                        <p class="text-sm text-gray-500" id="workout-placeholder">No workouts logged yet.</p>
+                        </div>
+                </div>
+            </div>
+        </div>
+        
+        <section id="charts" class="mt-4 border-t border-gray-200 pt-4">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2">Progress Visualization</h2>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div class="card bg-white p-4">
+                    <h3 class="text-xl font-bold mb-3 text-center text-gray-700">Weekly Net Calories</h3>
+                    <canvas id="weekly-chart"></canvas>
+                </div>
+                <div class="card bg-white p-4">
+                    <h3 class="text-xl font-bold mb-3 text-center text-gray-700">Monthly Net Calories</h3>
+                    <canvas id="monthly-chart"></canvas>
+                </div>
+            </div>
+        </section>
+    </div>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+    <div id="add-meal-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800">Add a New Meal Section</h3>
+            <label for="meal-name-input" class="block text-sm font-medium text-gray-700">Meal Name (e.g., Pre-Workout)</label>
+            <input type="text" id="meal-name-input" placeholder="Afternoon Snack" class="mt-1 block w-full px-4 py-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus-ring-primary">
+            <div class="mt-4 flex justify-end space-x-3">
+                <button id="cancel-add-meal" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-300">Cancel</button>
+                <button id="confirm-add-meal" class="px-4 py-2 bg-primary text-white rounded-lg hover-bg-primary transition duration-300">Add Section</button>
+            </div>
+        </div>
+    </div>
 
-        let userId;
-        let unsubscribeData;
-        let isLoginMode = true;
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        const loadingOverlay = document.getElementById('loading-overlay');
-        const authOverlay = document.getElementById('auth-overlay');
-        const appContent = document.getElementById('app-content');
-        const authForm = document.getElementById('auth-form');
-        const authTitle = document.getElementById('auth-title');
-        const authToggleBtn = document.getElementById('auth-toggle');
-        const authSubmitBtn = document.getElementById('auth-submit');
-        const authEmailInput = document.getElementById('auth-email');
-        const authPasswordInput = document.getElementById('auth-password');
-        const authErrorEl = document.getElementById('auth-error');
-        const signOutBtn = document.getElementById('sign-out-btn');
+        // Your specific Firebase configuration has been added here.
+        const firebaseConfig = {
+            apiKey: "AIzaSyBHzCIwUR5ncIA8-Hx9nNYbIu4V2EffZVQ",
+            authDomain: "my-diet-tracker-db.firebaseapp.com",
+            projectId: "my-diet-tracker-db",
+            storageBucket: "my-diet-tracker-db.appspot.com",
+            messagingSenderId: "564828202506",
+            appId: "1:564828202506:web:caa54e9668d6a4f62ca1f3",
+            measurementId: "G-4JQRXJWPEG"
+        };
 
-        onAuthStateChanged(auth, user => {
-            loadingOverlay.classList.add('hidden');
-            if (user) {
-                userId = user.uid;
-                appContent.classList.remove('hidden');
-                authOverlay.classList.add('hidden');
-                initializeAppLogic();
-            } else {
-                appContent.classList.add('hidden');
-                authOverlay.classList.remove('hidden');
-                if (unsubscribeData) {
-                    unsubscribeData();
-                }
-            }
-        });
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-        authForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = authEmailInput.value;
-            const password = authPasswordInput.value;
-            authErrorEl.textContent = '';
+        let userId;
+        let unsubscribeData;
+        let isLoginMode = true;
 
-            if (isLoginMode) {
-                try {
-                    await signInWithEmailAndPassword(auth, email, password);
-                } catch (error) {
-                    authErrorEl.textContent = 'Login failed. Check your email and password.';
-                    console.error("Login error:", error);
-                }
-            } else {
-                try {
-                    await createUserWithEmailAndPassword(auth, email, password);
-                } catch (error) {
-                    authErrorEl.textContent = 'Sign up failed: ' + error.message;
-                    console.error("Sign up error:", error);
-                }
-            }
-        });
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const authOverlay = document.getElementById('auth-overlay');
+        const appContent = document.getElementById('app-content');
+        const authForm = document.getElementById('auth-form');
+        const authTitle = document.getElementById('auth-title');
+        const authToggleBtn = document.getElementById('auth-toggle');
+        const authSubmitBtn = document.getElementById('auth-submit');
+        const authEmailInput = document.getElementById('auth-email');
+        const authPasswordInput = document.getElementById('auth-password');
+        const authErrorEl = document.getElementById('auth-error');
+        const signOutBtn = document.getElementById('sign-out-btn');
+        const primaryColor = document.documentElement.style.getPropertyValue('--color-primary');
 
-        authToggleBtn.addEventListener('click', () => {
-            isLoginMode = !isLoginMode;
-            authTitle.textContent = isLoginMode ? 'Log In' : 'Sign Up';
-            authSubmitBtn.textContent = isLoginMode ? 'Log In' : 'Sign Up';
-            authToggleBtn.textContent = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In";
-            authForm.reset();
-            authErrorEl.textContent = '';
-        });
+        onAuthStateChanged(auth, user => {
+            loadingOverlay.classList.add('hidden');
+            if (user) {
+                userId = user.uid;
+                appContent.classList.remove('hidden');
+                authOverlay.classList.add('hidden');
+                initializeAppLogic();
+            } else {
+                appContent.classList.add('hidden');
+                authOverlay.classList.remove('hidden');
+                if (unsubscribeData) {
+                    unsubscribeData();
+                }
+            }
+        });
 
-        signOutBtn.addEventListener('click', async () => {
-            await signOut(auth);
-        });
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = authEmailInput.value;
+            const password = authPasswordInput.value;
+            authErrorEl.textContent = '';
 
-        function initializeAppLogic() {
-            const dateInput = document.getElementById('current-date');
-            const mealContainer = document.getElementById('meal-container');
-            const workoutForm = document.getElementById('workout-form');
-            const workoutList = document.getElementById('workout-list');
-            const addMealBtn = document.getElementById('add-meal-btn');
-            const addMealModal = document.getElementById('add-meal-modal');
-            const cancelAddMealBtn = document.getElementById('cancel-add-meal');
-            const confirmAddMealBtn = document.getElementById('confirm-add-meal');
-            const mealNameInput = document.getElementById('meal-name-input');
-            const prevDayBtn = document.getElementById('prev-day');
-            const nextDayBtn = document.getElementById('next-day');
-            const bmrInput = document.getElementById('bmr-input');
-            
-            // NEW: Monthly Summary Elements
-            const monthSelect = document.getElementById('month-select');
-            const yearSelect = document.getElementById('year-select');
-            const monthlyNetEl = document.getElementById('monthly-net-calories');
-            const monthlyStatusLabelEl = document.getElementById('monthly-status-label');
+            if (isLoginMode) {
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } catch (error) {
+                    authErrorEl.textContent = 'Login failed. Check your email and password.';
+                    console.error("Login error:", error);
+                }
+            } else {
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                } catch (error) {
+                    authErrorEl.textContent = 'Sign up failed: ' + error.message;
+                    console.error("Sign up error:", error);
+                }
+            }
+        });
 
+        authToggleBtn.addEventListener('click', () => {
+            isLoginMode = !isLoginMode;
+            authTitle.textContent = isLoginMode ? 'Log In' : 'Sign Up';
+            authSubmitBtn.textContent = isLoginMode ? 'Log In' : 'Sign Up';
+            authToggleBtn.textContent = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In";
+            authForm.reset();
+            authErrorEl.textContent = '';
+        });
 
-            let weeklyChartInstance = null;
-            const today = new Date();
+        signOutBtn.addEventListener('click', async () => {
+            await signOut(auth);
+        });
 
-            // Determine the current month, setting 2025 as default year
-            const defaultYear = (new Date().getFullYear() === 2026) ? 2026 : 2025; 
+        function initializeAppLogic() {
+            const dateInput = document.getElementById('current-date');
+            const mealContainer = document.getElementById('meal-container');
+            const workoutForm = document.getElementById('workout-form');
+            const workoutList = document.getElementById('workout-list');
+            const addMealBtn = document.getElementById('add-meal-btn');
+            const addMealModal = document.getElementById('add-meal-modal');
+            const cancelAddMealBtn = document.getElementById('cancel-add-meal');
+            const confirmAddMealBtn = document.getElementById('confirm-add-meal');
+            const mealNameInput = document.getElementById('meal-name-input');
+            const prevDayBtn = document.getElementById('prev-day');
+            const nextDayBtn = document.getElementById('next-day');
+            const bmrInput = document.getElementById('bmr-input');
+            const workoutPlaceholder = document.getElementById('workout-placeholder');
 
-            let state = { 
-                currentDate: today.toISOString().split('T')[0], 
-                selectedMonth: today.getMonth(), // 0-indexed
-                selectedYear: defaultYear,
-            };
+            let weeklyChartInstance = null;
+            let monthlyChartInstance = null;
+            let state = { currentDate: new Date().toISOString().split('T')[0] };
+            const defaultMeals = ['Breakfast', 'Lunch', 'Dinner'];
 
-            const defaultMeals = ['Breakfast', 'Lunch', 'Dinner'];
+            // Initialize date input
+            dateInput.value = state.currentDate;
+            loadDataAndListen(state.currentDate);
 
-            // NEW: Month and Year Selector Initialization
-            function initializeSelectors() {
-                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                monthNames.forEach((name, index) => {
-                    const option = document.createElement('option');
-                    option.value = index;
-                    option.textContent = name;
-                    if (index === state.selectedMonth) { option.selected = true; }
-                    monthSelect.appendChild(option);
-                });
+            async function loadDataAndListen(date) {
+                if (unsubscribeData) unsubscribeData();
 
-                const years = [2025, 2026];
-                
-                years.forEach(year => {
-                    const option = document.createElement('option');
-                    option.value = year;
-                    option.textContent = year;
-                    if (year === state.selectedYear) { 
-                        option.selected = true;
-                    }
-                    yearSelect.appendChild(option);
-                });
-            }
-            
-            initializeSelectors();
+                const settingsRef = doc(db, 'users', userId);
+                const settingsSnap = await getDoc(settingsRef);
+                const settingsData = settingsSnap.data() || {};
+                state.bmr = settingsData.bmr || 1232; // Default BMR if not set
 
-            async function loadDataAndListen(date) {
-                if (unsubscribeData) unsubscribeData();
+                const dataRef = doc(db, 'users', userId, 'dates', date);
+                unsubscribeData = onSnapshot(dataRef, (docSnap) => {
+                    const data = docSnap.data() || {};
+                    state.meals = data.meals || {};
+                    state.workouts = data.workouts || {};
+                    if (Object.keys(state.meals).length === 0) {
+                        state.meals = {};
+                        defaultMeals.forEach(mealName => { state.meals[mealName] = []; });
+                    }
+                    render();
+                });
+            }
 
-                const settingsRef = doc(db, 'users', userId);
-                const settingsSnap = await getDoc(settingsRef);
-                const settingsData = settingsSnap.data() || {};
-                state.bmr = settingsData.bmr || 1232;
+            async function saveData() {
+                const docRef = doc(db, 'users', userId, 'dates', state.currentDate);
+                await setDoc(docRef, {
+                    meals: state.meals,
+                    workouts: state.workouts
+                }, { merge: true });
+            }
 
-                const dataRef = doc(db, 'users', userId, 'dates', date);
-                unsubscribeData = onSnapshot(dataRef, (docSnap) => {
-                    const data = docSnap.data() || {};
-                    state.meals = data.meals || {};
-                    state.workouts = data.workouts || {};
-                    if (Object.keys(state.meals).length === 0) {
-                        state.meals = {};
-                        defaultMeals.forEach(mealName => { state.meals[mealName] = []; });
-                    }
-                    render();
-                });
-            }
+            async function saveBMR() {
+                const settingsRef = doc(db, 'users', userId);
+                await setDoc(settingsRef, { bmr: state.bmr }, { merge: true });
+            }
 
-            async function saveData() {
-                const docRef = doc(db, 'users', userId, 'dates', state.currentDate);
-                await setDoc(docRef, {
-                    meals: state.meals,
-                    workouts: state.workouts
-                }, { merge: true });
-                render(); // This is the new crucial part for immediate UI updates
-            }
+            function render() {
+                dateInput.value = state.currentDate;
+                bmrInput.value = state.bmr;
+                renderMeals();
+                renderWorkouts();
+                updateSummary();
+                renderWeeklyChart();
+                renderMonthlyChart();
+            }
 
-            async function saveBMR() {
-                const settingsRef = doc(db, 'users', userId);
-                await setDoc(settingsRef, { bmr: state.bmr }, { merge: true });
-            }
+            function renderMeals() {
+                mealContainer.innerHTML = '';
+                Object.keys(state.meals).sort((a,b) => {
+                    const order = ['Breakfast', 'Lunch', 'Dinner'];
+                    return (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b));
+                }).forEach(mealName => {
+                    const mealItems = state.meals[mealName] || [];
+                    const mealTotal = mealItems.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
+                    const card = document.createElement('div');
+                    card.className = 'meal-card card bg-white p-4 border-left border-blue-500';
+                    card.innerHTML = `
+                         <div class="flex justify-between items-center mb-3 cursor-pointer" data-meal-toggle="${mealName}">
+                             <h2 class="text-xl font-bold text-gray-800">${mealName}</h2>
+                             <div class="flex items-center space-x-3">
+                                <span class="text-lg font-extrabold text-blue-600">${mealTotal} Cal</span>
+                                <button class="remove-meal-section-btn text-red-500 hover:text-red-700 p-1 rounded-full bg-red-100" data-meal-name="${mealName}" title="Delete Meal Section">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                             </div>
+                         </div>
+                         <div class="meal-content hidden border-t border-gray-200 pt-3" id="meal-content-${mealName}">
+                             <div class="meal-list space-y-3">
+                                 ${mealItems.length === 0 ? `<p class="text-sm text-gray-500">No items logged yet for ${mealName}.</p>` : mealItems.map((item, index) => `
+                                     <div class="meal-list-item flex justify-between items-start p-2 rounded-md border border-gray-100">
+                                         <div>
+                                             <p class="font-semibold text-gray-800">${item.food}</p>
+                                             <p class="text-xs text-gray-500 mt-1">
+                                                 <span class="font-bold text-blue-600">${item.calories || 0} Cal</span> | P: ${item.protein || 0}g | C: ${item.carbs || 0}g | F: ${item.fat || 0}g
+                                             </p>
+                                         </div>
+                                         <button class="remove-meal-item-btn text-red-400 hover:text-red-600 ml-4 p-1 rounded-full" data-meal-name="${mealName}" data-index="${index}" title="Remove Item">
+                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                         </button>
+                                     </div>
+                                 `).join('')}
+                             </div>
 
-            function render() {
-                dateInput.value = state.currentDate;
-                bmrInput.value = state.bmr;
-                renderMeals();
-                renderWorkouts();
-                updateSummary();
-                renderWeeklyChart();
-                renderMonthlySummaryBar(); // NEW: Call to update monthly summary
-            }
+                             <h4 class="text-lg font-semibold mt-4 mb-2 text-gray-700 border-t border-gray-200 pt-3">Add New Item</h4>
+                             <form class="meal-form space-y-3" data-meal-name="${mealName}">
+                                  <input type="text" name="food" placeholder="Food Item (e.g., Apple)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary" required>
+                                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                      <div><input type="number" step="any" name="calories" placeholder="Calories *" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary" required></div>
+                                      <div><input type="number" step="any" name="protein" placeholder="Protein (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                      <div><input type="number" step="any" name="carbs" placeholder="Carbs (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                      <div><input type="number" step="any" name="fat" placeholder="Fat (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                      <div><input type="number" step="any" name="sugar" placeholder="Sugar (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                      <div><input type="number" step="any" name="fiber" placeholder="Fiber (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                  </div>
+                                  <button type="submit" class="w-full bg-blue-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-blue-600 transition duration-300 mt-3">Log Item</button>
+                             </form>
+                         </div>
+                     `;
+                    mealContainer.appendChild(card);
+                });
+            }
 
-            function renderMeals() {
-                mealContainer.innerHTML = '';
-                Object.keys(state.meals).sort((a,b) => {
-                    const order = ['Breakfast', 'Lunch', 'Dinner'];
-                    return (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b));
-                }).forEach(mealName => {
-                    const mealItems = state.meals[mealName] || [];
-                    const card = document.createElement('div');
-                    card.className = 'meal-card bg-white p-6 rounded-xl shadow-lg';
-                    card.innerHTML = `
-                         <div class="flex justify-between items-center mb-4">
-                             <h2 class="text-2xl font-bold">${mealName}</h2>
-                             <button class="remove-meal-section-btn text-red-500 hover:text-red-700 font-bold" data-meal-name="${mealName}">X</button>
-                         </div>
-                         <form class="meal-form" data-meal-name="${mealName}">
-                              <div class="mb-4">
-                                  <label class="block text-sm font-medium text-gray-700">Food Item <span class="text-red-500">*</span></label>
-                                  <input type="text" name="food" placeholder="e.g., Chicken Breast" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
-                              </div>
-                              <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-                                  <div><label class="block text-sm font-medium">Calories <span class="text-red-500">*</span></label><input type="number" step="any" name="calories" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required></div>
-                                  <div><label class="block text-sm font-medium">Fat (g)</label><input type="number" step="any" name="fat" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
-                                  <div><label class="block text-sm font-medium">Carbs (g)</label><input type="number" step="any" name="carbs" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
-                                  <div><label class="block text-sm font-medium">Sugar (g)</label><input type="number" step="any" name="sugar" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
-                                  <div><label class="block text-sm font-medium">Fiber (g)</label><input type="number" step="any" name="fiber" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
-                                  <div><label class="block text-sm font-medium">Protein (g)</label><input type="number" step="any" name="protein" placeholder="0" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></div>
-                              </div>
-                              <button type="submit" class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-300">Add Item</button>
-                         </form>
-                          <div class="meal-list mt-6 space-y-2">
-                               ${mealItems.map((item, index) => `
-                                   <div class="flex justify-between items-start p-2 rounded-md bg-gray-50">
-                                       <div>
-                                           <p class="font-semibold">${item.food}</p>
-                                           <p class="text-xs text-gray-500">
-                                               Cal: ${item.calories || 0} | P: ${item.protein || 0}g | C: ${item.carbs || 0}g | F: ${item.fat || 0}g
-                                           </p>
-                                       </div>
-                                       <button class="remove-meal-item-btn text-red-400 hover:text-red-600" data-meal-name="${mealName}" data-index="${index}">×</button>
-                                   </div>
-                               `).join('')}
-                           </div>
-                     `;
-                mealContainer.appendChild(card);
-            });
-            }
+            function renderWorkouts() {
+                const workouts = Object.values(state.workouts);
+                workoutList.innerHTML = '';
+                if (workouts.length === 0) {
+                    workoutPlaceholder.classList.remove('hidden');
+                } else {
+                    workoutPlaceholder.classList.add('hidden');
+                    Object.keys(state.workouts).forEach((id) => {
+                        const workout = state.workouts[id];
+                        const workoutEl = document.createElement('div');
+                        workoutEl.className = 'flex justify-between items-center p-2 rounded-md bg-red-50 border border-red-100';
+                        workoutEl.innerHTML = `
+                            <div>
+                                <p class="font-semibold text-gray-800">${workout.type}</p>
+                                <p class="text-xs text-gray-500 mt-1"><span class="font-bold text-red-600">${workout.calories}</span> calories burned</p>
+                            </div>
+                            <button class="remove-workout-btn text-red-400 hover:text-red-600 ml-4 p-1 rounded-full" data-id="${id}" title="Remove Workout">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                            `;
+                        workoutList.appendChild(workoutEl);
+                    });
+                }
+            }
 
-        function renderWorkouts() {
-            workoutList.innerHTML = '';
-             Object.keys(state.workouts).forEach((id) => {
-                const workout = state.workouts[id];
-                const workoutEl = document.createElement('div');
-                workoutEl.className = 'flex justify-between items-center p-2 rounded-md bg-gray-50';
-                workoutEl.innerHTML = `
-                     <div>
-                         <p class="font-semibold">${workout.type}</p>
-                         <p class="text-xs text-gray-500">${workout.calories} calories burned</p>
-                     </div>
-                     <button class="remove-workout-btn text-red-400 hover:text-red-600" data-id="${id}">×</button>
-                 `;
-                workoutList.appendChild(workoutEl);
-            });
-        }
+            function updateSummary() {
+                let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
+                Object.values(state.meals).flat().forEach(item => {
+                    totalCalsIn += Number(item.calories) || 0;
+                    totalProtein += Number(item.protein) || 0;
+                    totalCarbs += Number(item.carbs) || 0;
+                    totalFat += Number(item.fat) || 0;
+                    totalSugar += Number(item.sugar) || 0;
+                    totalFiber += Number(item.fiber) || 0;
+                });
+                const bmr = Number(state.bmr) || 0;
+                let totalCalsOut = bmr;
+                Object.values(state.workouts).forEach(workout => { totalCalsOut += Number(workout.calories) || 0; });
+                const net = totalCalsIn - totalCalsOut;
 
-        function updateSummary() {
-            let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
-            Object.values(state.meals).flat().forEach(item => {
-                totalCalsIn += Number(item.calories) || 0;
-                totalProtein += Number(item.protein) || 0;
-                totalCarbs += Number(item.carbs) || 0;
-                totalFat += Number(item.fat) || 0;
-                totalSugar += Number(item.sugar) || 0;
-                totalFiber += Number(item.fiber) || 0;
-            });
-            const bmr = Number(state.bmr) || 0;
-            let totalCalsOut = bmr;
-             Object.values(state.workouts).forEach(workout => { totalCalsOut += Number(workout.calories) || 0; });
-            const net = totalCalsIn - totalCalsOut;
-            document.getElementById('total-calories-in').textContent = totalCalsIn;
-            document.getElementById('total-calories-out').textContent = totalCalsOut;
-            document.getElementById('net-calories').textContent = net;
-            const statusEl = document.getElementById('calorie-status');
-            if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.className = 'text-2xl font-semibold text-green-600';
-            } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.className = 'text-2xl font-semibold text-orange-600';
-            } else { statusEl.textContent = 'Balanced'; statusEl.className = 'text-2xl font-semibold text-gray-800'; }
-            document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
-            document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
-            document.getElementById('total-fat').textContent = `${totalFat.toFixed(1)} g`;
-            document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
-            document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
-        }
+                document.getElementById('total-calories-in').textContent = totalCalsIn;
+                document.getElementById('total-calories-out').textContent = totalCalsOut;
+                document.getElementById('net-calories').textContent = net;
 
-        async function renderWeeklyChart() {
-            const ctx = document.getElementById('weekly-chart').getContext('2d');
-            if (weeklyChartInstance) weeklyChartInstance.destroy();
-            const today = new Date(state.currentDate + 'T00:00:00');
-            const dayOfWeek = today.getDay();
-             const startDate = new Date(today);
-            startDate.setDate(today.getDate() - dayOfWeek);
-            const labels = [], data = [], backgroundColors = [];
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(startDate); date.setDate(startDate.getDate() + i);
-                const dateString = date.toISOString().split('T')[0];
-                labels.push(date.toLocaleString(undefined, { weekday: 'short' }));
-                const docRef = doc(db, 'users', userId, 'dates', dateString);
-                const docSnap = await getDoc(docRef);
-                const dayData = docSnap.data();
-                const netCalories = dayData ? calculateDailyNet(dayData) : 0;
-                data.push(netCalories);
-                backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
-            }
-            weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
-        }
+                const statusEl = document.getElementById('calorie-status');
+                statusEl.classList.remove('text-green-600', 'text-orange-600', 'text-gray-800');
+                if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.classList.add('text-primary');
+                } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.classList.add('text-orange-600');
+                } else { statusEl.textContent = 'Balanced'; statusEl.classList.add('text-gray-800'); }
 
-        function calculateDailyNet(dayData) {
-            const bmr = Number(state.bmr) || 0;
-            let calsIn = 0; if (dayData && dayData.meals) { calsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-            let exerciseCals = 0; if (dayData && dayData.workouts) { exerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-            return calsIn - (bmr + exerciseCals);
-        }
+                document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
+                document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
+                document.getElementById('total-fat').textContent = `${totalFat.toFixed(1)} g`;
+                document.getElementById('total-sugar').textContent = `${totalSugar.toFixed(1)} g`;
+                document.getElementById('total-fiber').textContent = `${totalFiber.toFixed(1)} g`;
+            }
 
-        // NEW: Get all daily data for a specific month
-        async function getMonthlyData(year, month) {
-            // month is 0-indexed, so month + 1 is the next month, and day 0 gives the last day of the current month
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const promises = [];
-            
-            for (let i = 1; i <= daysInMonth; i++) {
-                const date = new Date(year, month, i);
-                const dateString = date.toISOString().split('T')[0];
-                const docRef = doc(db, 'users', userId, 'dates', dateString);
-                promises.push(getDoc(docRef));
-            }
+            // Chart functions (using the new color palette)
+            async function renderWeeklyChart() {
+                const ctx = document.getElementById('weekly-chart').getContext('2d');
+                if (weeklyChartInstance) weeklyChartInstance.destroy();
+                const today = new Date(state.currentDate + 'T00:00:00');
+                const dayOfWeek = today.getDay();
+                const startDate = new Date(today);
+                startDate.setDate(today.getDate() - dayOfWeek);
+                const labels = [], data = [], backgroundColors = [];
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(startDate); date.setDate(startDate.getDate() + i);
+                    const dateString = date.toISOString().split('T')[0];
+                    labels.push(date.toLocaleString(undefined, { weekday: 'short' }));
+                    const docRef = doc(db, 'users', userId, 'dates', dateString);
+                    const docSnap = await getDoc(docRef);
+                    const dayData = docSnap.data();
+                    const netCalories = dayData ? calculateDailyNet(dayData) : 0;
+                    data.push(netCalories);
+                    backgroundColors.push(netCalories < 0 ? 'rgba(20, 184, 166, 0.7)' : 'rgba(251, 146, 60, 0.7)'); // Teal for Deficit, Orange for Surplus/Balanced
+                }
+                weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderRadius: 4 }] }, options: { scales: { y: { beginAtZero: false } }, plugins: { legend: { display: false } } } });
+            }
 
-            const snapshots = await Promise.all(promises);
-            return snapshots.map(snap => snap.data()).filter(data => data != null);
-        }
+            async function renderMonthlyChart() {
+                const ctx = document.getElementById('monthly-chart').getContext('2d');
+                if (monthlyChartInstance) monthlyChartInstance.destroy();
+                const today = new Date(state.currentDate + 'T00:00:00');
+                const year = today.getFullYear(), month = today.getMonth();
+                const endDate = new Date(year, month + 1, 0);
+                const labels = [], data = [], backgroundColors = [];
+                for (let i = 1; i <= endDate.getDate(); i++) {
+                    const date = new Date(year, month, i);
+                    const dateString = date.toISOString().split('T')[0];
+                    labels.push(i);
+                    const docRef = doc(db, 'users', userId, 'dates', dateString);
+                    const docSnap = await getDoc(docRef);
+                    const dayData = docSnap.data();
+                    const netCalories = dayData ? calculateDailyNet(dayData) : 0;
+                    data.push(netCalories);
+                    backgroundColors.push(netCalories < 0 ? 'rgba(20, 184, 166, 0.7)' : 'rgba(251, 146, 60, 0.7)');
+                }
+                monthlyChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: 'rgba(20, 184, 166, 0.2)', borderColor: primaryColor, borderWidth: 2, pointRadius: 4, tension: 0.1, fill: true }] }, options: { scales: { y: { beginAtZero: false } }, plugins: { legend: { display: false } } } });
+            }
 
-        // NEW: Render the Monthly Summary Bar
-        async function renderMonthlySummaryBar() {
-            monthlyNetEl.textContent = 'Loading...';
-            
-            const monthData = await getMonthlyData(state.selectedYear, state.selectedMonth);
-            
-            let totalMonthlyNet = 0;
-            
-            monthData.forEach(dayData => {
-                totalMonthlyNet += calculateDailyNet(dayData);
-            });
-            
-            monthlyNetEl.textContent = totalMonthlyNet;
+            function calculateDailyNet(dayData) {
+                const bmr = Number(state.bmr) || 0;
+                let calsIn = 0; if (dayData && dayData.meals) { calsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
+                let exerciseCals = 0; if (dayData && dayData.workouts) { exerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
+                return calsIn - (bmr + exerciseCals);
+            }
 
-            // Update status text and color
-            let statusClass = 'text-3xl font-bold ';
-            let statusText = 'Balance';
+            // Event Listeners
+            bmrInput.addEventListener('change', () => { state.bmr = Number(bmrInput.value) || 0; saveBMR(); updateSummary(); }); 
+            
+            // Meal Content Toggle & Item Removal
+            mealContainer.addEventListener('click', (e) => {
+                if (e.target.closest('[data-meal-toggle]')) {
+                    const header = e.target.closest('[data-meal-toggle]');
+                    const mealName = header.dataset.mealToggle;
+                    const content = document.getElementById(`meal-content-${mealName}`);
+                    content.classList.toggle('hidden');
+                }
+                
+                if (e.target.closest('.remove-meal-item-btn')) {
+                    const btn = e.target.closest('.remove-meal-item-btn');
+                    state.meals[btn.dataset.mealName].splice(btn.dataset.index, 1);
+                    saveData();
+                }
+                if (e.target.closest('.remove-meal-section-btn')) {
+                    const btn = e.target.closest('.remove-meal-section-btn');
+                    delete state.meals[btn.dataset.mealName];
+                    saveData();
+                }
+            });
 
-            if (totalMonthlyNet < 0) { 
-                statusText = 'Deficit'; 
-                statusClass += 'text-green-600';
-            } else if (totalMonthlyNet > 0) { 
-                statusText = 'Surplus'; 
-                statusClass += 'text-orange-600';
-            } else {
-                statusClass += 'text-gray-800';
-            }
-            
-            monthlyNetEl.className = statusClass;
-            monthlyStatusLabelEl.textContent = `Total Calorie ${statusText} for Selected Month:`;
-        }
+            mealContainer.addEventListener('submit', (e) => {
+                if (e.target.classList.contains('meal-form')) {
+                    e.preventDefault();
+                    const form = e.target;
+                    const mealName = form.dataset.mealName;
+                    const formData = new FormData(form);
 
+                    const mealItem = {
+                        food: formData.get('food'),
+                        calories: Number(formData.get('calories')) || 0,
+                        protein: Number(formData.get('protein')) || 0,
+                        carbs: Number(formData.get('carbs')) || 0,
+                        fat: Number(formData.get('fat')) || 0,
+                        sugar: Number(formData.get('sugar')) || 0,
+                        fiber: Number(formData.get('fiber')) || 0
+                    };
 
-        bmrInput.addEventListener('change', () => { 
-            state.bmr = Number(bmrInput.value) || 0; 
-            saveBMR(); 
-            render(); 
-        });
+                    if (!state.meals[mealName]) {
+                        state.meals[mealName] = [];
+                    }
+                    state.meals[mealName].push(mealItem);
+                    saveData();
+                    form.reset();
+                }
+            });
 
-        mealContainer.addEventListener('submit', (e) => {
-            if (e.target.classList.contains('meal-form')) {
-                e.preventDefault();
-                const form = e.target;
-                const mealName = form.dataset.meal-name;
-                const formData = new FormData(form);
+            workoutForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const typeInput = document.getElementById('workout-type');
+                const caloriesInput = document.getElementById('calories-burned');
+                if (typeInput.value && caloriesInput.value) {
+                    state.workouts[Date.now().toString()] = { type: typeInput.value, calories: Number(caloriesInput.value) || 0 };
+                    saveData();
+                    typeInput.value = '';
+                    caloriesInput.value = '';
+                }
+            });
+            workoutList.addEventListener('click', (e) => {
+                if (e.target.closest('.remove-workout-btn')) {
+                    delete state.workouts[e.target.closest('.remove-workout-btn').dataset.id];
+                    saveData();
+                }
+            });
 
-                const mealItem = {
-                    food: formData.get('food'),
-                    calories: Number(formData.get('calories')) || 0,
-                    protein: Number(formData.get('protein')) || 0,
-                    carbs: Number(formData.get('carbs')) || 0,
-                    fat: Number(formData.get('fat')) || 0,
-                    sugar: Number(formData.get('sugar')) || 0,
-                    fiber: Number(formData.get('fiber')) || 0
-                };
+            dateInput.addEventListener('change', () => {
+                state.currentDate = dateInput.value;
+                loadDataAndListen(state.currentDate);
+            });
+            prevDayBtn.addEventListener('click', () => {
+                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
+                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
+            });
+            nextDayBtn.addEventListener('click', () => {
+                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
+                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
+            });
 
-                if (!state.meals[mealName]) {
-                    state.meals[mealName] = [];
-                }
-                state.meals[mealName].push(mealItem);
-                saveData();
-                form.reset();
-            }
-        });
-        mealContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('remove-meal-item-btn')) {
-                state.meals[e.target.dataset.mealName].splice(e.target.dataset.index, 1);
-                saveData();
-            }
-            if (e.target.classList.contains('remove-meal-section-btn')) {
-                delete state.meals[e.target.dataset.mealName];
-                saveData();
-            }
-        });
-        workoutForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const typeInput = document.getElementById('workout-type');
-            const caloriesInput = document.getElementById('calories-burned');
-            if (typeInput.value && caloriesInput.value) {
-                state.workouts[Date.now().toString()] = { type: typeInput.value, calories: Number(caloriesInput.value) || 0 };
-                saveData();
-                typeInput.value = '';
-                caloriesInput.value = '';
-            }
-        });
-        workoutList.addEventListener('click', (e) => {
-            if (e.target.classList.contains('remove-workout-btn')) {
-                delete state.workouts[e.target.dataset.id];
-                saveData();
-            }
-        });
-
-        dateInput.addEventListener('change', () => {
-            state.currentDate = dateInput.value;
-            loadDataAndListen(state.currentDate);
-        });
-        prevDayBtn.addEventListener('click', () => {
-            const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
-            state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-        });
-        nextDayBtn.addEventListener('click', () => {
-            const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
-            state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-        });
-
-        // NEW: Event Listeners for Month/Year Selectors
-        monthSelect.addEventListener('change', (e) => {
-            state.selectedMonth = Number(e.target.value);
-            renderMonthlySummaryBar();
-        });
-
-        yearSelect.addEventListener('change', (e) => {
-            state.selectedYear = Number(e.target.value);
-            renderMonthlySummaryBar();
-        });
-
-        // MODAL Logic (simplified from original)
-        addMealBtn.addEventListener('click', () => {
-            addMealModal.classList.remove('hidden');
-        });
-        cancelAddMealBtn.addEventListener('click', () => {
-            addMealModal.classList.add('hidden');
-        });
-        confirmAddMealBtn.addEventListener('click', () => {
-            const mealName = mealNameInput.value.trim();
-            if (mealName) {
-                state.meals[mealName] = [];
-                saveData();
-                mealNameInput.value = '';
-                addMealModal.classList.add('hidden');
-            } else {
-                alert('Please enter a meal name.');
-            }
-        });
-
-        // Initial load after login
-        loadDataAndListen(state.currentDate);
-        
-    }
-    </script>
-
+            // Modal Logic
+            addMealBtn.addEventListener('click', () => addMealModal.classList.remove('hidden'));
+            cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
+            confirmAddMealBtn.addEventListener('click', () => {
+                const mealName = mealNameInput.value.trim();
+                if (mealName && !state.meals[mealName]) {
+                    state.meals[mealName] = [];
+                    saveData();
+                    addMealModal.classList.add('hidden');
+                    mealNameInput.value = '';
+                } else if (mealName) {
+                    alert('Meal section already exists or name is invalid.');
+                }
+            });
+        }
+    </script>
 </body>
 </html>

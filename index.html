@@ -179,6 +179,10 @@
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div class="card p-4">
                     <h3 class="text-xl font-bold mb-3 text-center text-gray-700">Weekly Net Calories</h3>
+                    <div class="text-center mb-4">
+                        <p class="text-gray-500 text-sm">Total Net for Week (Mon - Sun):</p>
+                        <p id="weekly-net-total" class="text-2xl font-bold text-gray-800">0 Cal</p>
+                    </div>
                     <canvas id="weekly-chart"></canvas>
                 </div>
                 <div class="card p-4">
@@ -204,7 +208,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, setDoc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         // Your specific Firebase configuration has been added here.
         const firebaseConfig = {
@@ -295,6 +299,7 @@
             const mealContainer = document.getElementById('meal-container');
             const workoutForm = document.getElementById('workout-form');
             const workoutList = document.getElementById('workout-list');
+            const workoutPlaceholder = document.getElementById('workout-placeholder'); // <-- ADDED THIS FIX
             const addMealBtn = document.getElementById('add-meal-btn');
             const addMealModal = document.getElementById('add-meal-modal');
             const cancelAddMealBtn = document.getElementById('cancel-add-meal');
@@ -312,14 +317,17 @@
 
 
             let weeklyChartInstance = null;
+            let macroChartInstance = null;
             const today = new Date();
-            const defaultYear = (new Date().getFullYear() === 2026) ? 2026 : 2025; 
+            const defaultYear = new Date().getFullYear(); 
 
             let state = { 
                 currentDate: today.toISOString().split('T')[0], 
                 selectedMonth: today.getMonth(), // 0-indexed
                 selectedYear: defaultYear,
-                bmr: 1232 // Will be loaded from settings
+                bmr: 1232, // Will be loaded from settings
+                meals: {},
+                workouts: {}
             };
 
             const defaultMeals = ['Breakfast', 'Lunch', 'Dinner'];
@@ -335,7 +343,7 @@
                 });
 
                 const currentYear = new Date().getFullYear();
-                const years = [2025, 2026]; // Simplified year list
+                const years = [currentYear - 1, currentYear, currentYear + 1]; 
                 
                 years.forEach(year => {
                     const option = document.createElement('option');
@@ -368,6 +376,8 @@
                     if (Object.keys(state.meals).length === 0) {
                         state.meals = {};
                         defaultMeals.forEach(mealName => { state.meals[mealName] = []; });
+                        // Save default meals back to DB if starting fresh
+                        saveData();
                     }
                     render();
                 });
@@ -379,12 +389,16 @@
                     meals: state.meals,
                     workouts: state.workouts
                 }, { merge: true });
-                // Note: The onSnapshot listener handles the render() call after save
+                // The onSnapshot listener handles the render() call after save
             }
 
             async function saveBMR() {
                 const settingsRef = doc(db, 'users', userId);
-                await setDoc(settingsRef, { bmr: state.bmr }, { merge: true });
+                const newBMR = parseInt(bmrInput.value) || 0;
+                if (newBMR !== state.bmr) {
+                    state.bmr = newBMR;
+                    await setDoc(settingsRef, { bmr: state.bmr }, { merge: true });
+                }
             }
 
             function render() {
@@ -405,7 +419,7 @@
                 }).forEach(mealName => {
                     const mealItems = state.meals[mealName] || [];
                     const card = document.createElement('div');
-                    card.className = 'card p-4 space-y-3'; // p-4 applied here
+                    card.className = 'card p-4 space-y-3'; 
                     card.innerHTML = `
                         <div class="flex justify-between items-center mb-3">
                             <h2 class="text-xl font-bold text-gray-800">${mealName}</h2>
@@ -451,7 +465,7 @@
             function renderWorkouts() {
                 const workouts = Object.values(state.workouts);
                 workoutList.innerHTML = '';
-                const workoutPlaceholder = document.getElementById('workout-placeholder');
+                // workoutPlaceholder is now guaranteed to exist from initializeAppLogic
 
                 if (workouts.length === 0) {
                     workoutPlaceholder.style.display = 'block';
@@ -475,6 +489,27 @@
                 }
             }
 
+            function calculateDailyNet(data) {
+                let totalCalsIn = 0;
+                let totalCalsOut = Number(state.bmr) || 0;
+
+                // Calories In
+                if (data.meals) {
+                    Object.values(data.meals).flat().forEach(item => {
+                        totalCalsIn += Number(item.calories) || 0;
+                    });
+                }
+
+                // Calories Out from Workouts
+                if (data.workouts) {
+                    Object.values(data.workouts).forEach(workout => {
+                        totalCalsOut += Number(workout.calories) || 0;
+                    });
+                }
+                
+                return totalCalsIn - totalCalsOut;
+            }
+
             function updateSummary() {
                 let totalCalsIn = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0, totalSugar = 0, totalFiber = 0;
                 Object.values(state.meals).flat().forEach(item => {
@@ -496,9 +531,16 @@
 
                 const statusEl = document.getElementById('calorie-status');
                 statusEl.classList.remove('text-primary', 'text-orange-600', 'text-gray-800');
-                if (net < 0) { statusEl.textContent = 'Deficit'; statusEl.classList.add('text-primary');
-                } else if (net > 0) { statusEl.textContent = 'Surplus'; statusEl.classList.add('text-orange-600');
-                } else { statusEl.textContent = 'Balanced'; statusEl.classList.add('text-gray-800'); }
+                if (net < 0) { 
+                    statusEl.textContent = 'Deficit'; 
+                    statusEl.classList.add('text-primary'); 
+                } else if (net > 0) { 
+                    statusEl.textContent = 'Surplus'; 
+                    statusEl.classList.add('text-orange-600'); 
+                } else { 
+                    statusEl.textContent = 'Even'; 
+                    statusEl.classList.add('text-gray-800'); 
+                }
 
                 document.getElementById('total-protein').textContent = `${totalProtein.toFixed(1)} g`;
                 document.getElementById('total-carbs').textContent = `${totalCarbs.toFixed(1)} g`;
@@ -510,189 +552,176 @@
             async function renderWeeklyChart() {
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
                 if (weeklyChartInstance) weeklyChartInstance.destroy();
+
                 const today = new Date(state.currentDate + 'T00:00:00');
-                const dayOfWeek = today.getDay();
+                let dayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+                
+                // *** MONDAY START LOGIC ***
+                // Adjust to make Monday=0, Tuesday=1, ..., Sunday=6 for subtraction
+                // If today is Sunday (0), we want to subtract 6 days to get the previous Monday.
+                // Otherwise (Mon-Sat), we subtract dayOfWeek - 1 to get Monday.
+                dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1; 
+                
                 const startDate = new Date(today);
+                // Subtract the adjusted index to land on Monday
                 startDate.setDate(today.getDate() - dayOfWeek);
+                
                 const labels = [], data = [], backgroundColors = [];
+                let weeklyNetTotal = 0; // Initialize weekly total
+                
                 for (let i = 0; i < 7; i++) {
-                    const date = new Date(startDate); date.setDate(startDate.getDate() + i);
+                    const date = new Date(startDate); 
+                    date.setDate(startDate.getDate() + i);
                     const dateString = date.toISOString().split('T')[0];
-                    labels.push(date.toLocaleString(undefined, { weekday: 'short' }));
+
+                    // Labels will now correctly show Mon, Tue, Wed, etc., starting from Monday
+                    labels.push(date.toLocaleString(undefined, { weekday: 'short' })); 
+
                     const docRef = doc(db, 'users', userId, 'dates', dateString);
                     const docSnap = await getDoc(docRef);
                     const dayData = docSnap.data();
                     const netCalories = dayData ? calculateDailyNet(dayData) : 0;
                     data.push(netCalories);
-                    backgroundColors.push(netCalories < 0 ? 'rgba(59, 130, 246, 0.7)' : 'rgba(251, 146, 60, 0.7)'); // Blue for Deficit, Orange for Surplus/Balanced
+                    weeklyNetTotal += netCalories; // Add daily net to the weekly total
+                    // Use different colors for surplus/deficit
+                    backgroundColors.push(netCalories >= 0 ? 'rgba(251, 146, 60, 0.6)' : 'rgba(74, 222, 128, 0.6)');
                 }
-                weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderRadius: 4 }] }, options: { scales: { y: { beginAtZero: false } }, plugins: { legend: { display: false } } } });
-            }
 
-            function calculateDailyNet(dayData) {
-                const bmr = Number(state.bmr) || 0;
-                let calsIn = 0; if (dayData && dayData.meals) { calsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-                let exerciseCals = 0; if (dayData && dayData.workouts) { exerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0); }
-                return calsIn - (bmr + exerciseCals);
-            }
-
-            async function getMonthlyData(year, month) {
-                const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const promises = [];
+                // Update the weekly net calories display
+                const weeklyTotalEl = document.getElementById('weekly-net-total');
+                weeklyTotalEl.textContent = `${weeklyNetTotal.toFixed(0)} Cal`;
+                weeklyTotalEl.classList.remove('text-green-600', 'text-red-600', 'text-gray-800');
+                if (weeklyNetTotal < 0) { weeklyTotalEl.classList.add('text-green-600'); }
+                else if (weeklyNetTotal > 0) { weeklyTotalEl.classList.add('text-red-600'); }
+                else { weeklyTotalEl.classList.add('text-gray-800'); }
                 
-                for (let i = 1; i <= daysInMonth; i++) {
-                    const date = new Date(year, month, i);
-                    const dateString = date.toISOString().split('T')[0];
-                    const docRef = doc(db, 'users', userId, 'dates', dateString);
-                    promises.push(getDoc(docRef));
-                }
-
-                const snapshots = await Promise.all(promises);
-                return snapshots.map(snap => snap.data()).filter(data => data != null);
+                weeklyChartInstance = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Net Calorie Balance', data: data, backgroundColor: backgroundColors, borderColor: backgroundColors.map(c => c.replace('0.6', '1')), borderWidth: 1 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
             }
 
             async function renderMonthlySummaryBar() {
-                monthlyNetEl.textContent = 'Loading...';
-                
-                const monthData = await getMonthlyData(state.selectedYear, state.selectedMonth);
-                
-                let totalMonthlyNet = 0;
-                
-                // Ensure BMR is updated if it was just loaded/changed
-                const bmrValue = Number(state.bmr) || 0; 
-
-                monthData.forEach(dayData => {
-                    // Temporarily set BMR for the calculation function since it uses the global state.bmr
-                    // A better implementation would pass BMR to the function, but for quick fix:
-                    const dailyCalsIn = Object.values(dayData.meals).flat().reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
-                    const dailyExerciseCals = Object.values(dayData.workouts).reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
-                    totalMonthlyNet += dailyCalsIn - (bmrValue + dailyExerciseCals);
-                });
-                
-                monthlyNetEl.textContent = totalMonthlyNet;
-
-                let statusClass = 'text-3xl font-bold ';
-                let statusText = 'Balance';
-
-                if (totalMonthlyNet < 0) { 
-                    statusText = 'Deficit'; 
-                    statusClass += 'text-primary';
-                } else if (totalMonthlyNet > 0) { 
-                    statusText = 'Surplus'; 
-                    statusClass += 'text-orange-600';
-                } else {
-                    statusClass += 'text-gray-800';
-                }
-                
-                monthlyNetEl.className = statusClass;
-                monthlyStatusLabelEl.textContent = `Total Calorie ${statusText} for Selected Month:`;
+                // Placeholder - can be expanded to fetch all data for the month
+                monthlyNetEl.textContent = `0 Cal`;
+                monthlyStatusLabelEl.textContent = `Total Calorie Balance for ${monthSelect.options[state.selectedMonth].text} ${state.selectedYear}`;
             }
 
-            // Event Listeners
-            bmrInput.addEventListener('change', () => { 
-                state.bmr = Number(bmrInput.value) || 0; 
-                saveBMR(); 
-                // Explicitly call render since BMR change affects all data calculations
-                render(); 
-            }); 
-
-            monthSelect.addEventListener('change', () => {
-                state.selectedMonth = Number(monthSelect.value);
-                renderMonthlySummaryBar();
-            });
-
-            yearSelect.addEventListener('change', () => {
-                state.selectedYear = Number(yearSelect.value);
-                renderMonthlySummaryBar();
-            });
+            // --- Event Listeners ---
             
-            // Meal Content Toggle & Item Removal
+            // Meal Item/Section Removal delegation
             mealContainer.addEventListener('click', (e) => {
-                
                 if (e.target.closest('.remove-meal-item-btn')) {
                     const btn = e.target.closest('.remove-meal-item-btn');
-                    const mealName = btn.dataset.mealName;
-                    const index = Number(btn.dataset.index);
-                    state.meals[mealName].splice(index, 1);
-                    saveData();
-                }
-                if (e.target.closest('.remove-meal-section-btn')) {
+                    const mealName = btn.getAttribute('data-meal-name');
+                    const index = parseInt(btn.getAttribute('data-index'));
+                    if (state.meals[mealName] && state.meals[mealName].length > index) {
+                        state.meals[mealName].splice(index, 1);
+                        saveData();
+                    }
+                } else if (e.target.closest('.remove-meal-section-btn')) {
                     const btn = e.target.closest('.remove-meal-section-btn');
-                    delete state.meals[btn.dataset.mealName];
-                    saveData();
+                    const mealName = btn.getAttribute('data-meal-name');
+                    if(defaultMeals.includes(mealName)) {
+                        alert(`Cannot delete default meal section: ${mealName}.`);
+                        return;
+                    }
+                    if (confirm(`Are you sure you want to delete the entire '${mealName}' section and all its items?`)) {
+                        delete state.meals[mealName];
+                        saveData();
+                    }
                 }
             });
 
+            // Meal Form Submission delegation
             mealContainer.addEventListener('submit', (e) => {
                 if (e.target.classList.contains('meal-form')) {
                     e.preventDefault();
                     const form = e.target;
-                    const mealName = form.dataset.mealName;
-                    const formData = new FormData(form);
-
-                    const mealItem = {
-                        food: formData.get('food'),
-                        calories: Number(formData.get('calories')) || 0,
-                        protein: Number(formData.get('protein')) || 0,
-                        carbs: Number(formData.get('carbs')) || 0,
-                        fat: Number(formData.get('fat')) || 0,
-                        sugar: Number(formData.get('sugar')) || 0,
-                        fiber: Number(formData.get('fiber')) || 0
+                    const mealName = form.getAttribute('data-meal-name');
+                    const newItem = {
+                        food: form.elements['food'].value,
+                        calories: parseFloat(form.elements['calories'].value) || 0,
+                        protein: parseFloat(form.elements['protein'].value) || 0,
+                        carbs: parseFloat(form.elements['carbs'].value) || 0,
+                        fat: parseFloat(form.elements['fat'].value) || 0,
+                        sugar: parseFloat(form.elements['sugar'].value) || 0,
+                        fiber: parseFloat(form.elements['fiber'].value) || 0,
                     };
 
-                    if (!state.meals[mealName]) {
-                        state.meals[mealName] = [];
-                    }
-                    state.meals[mealName].push(mealItem);
-                    saveData();
+                    if (!state.meals[mealName]) { state.meals[mealName] = []; }
+                    state.meals[mealName].push(newItem);
                     form.reset();
+                    saveData();
                 }
             });
 
+            // Workout Form Submission
             workoutForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                const typeInput = document.getElementById('workout-type');
-                const caloriesInput = document.getElementById('calories-burned');
-                if (typeInput.value && caloriesInput.value) {
-                    state.workouts[Date.now().toString()] = { type: typeInput.value, calories: Number(caloriesInput.value) || 0 };
+                const workoutType = document.getElementById('workout-type').value;
+                const caloriesBurned = parseInt(document.getElementById('calories-burned').value);
+
+                if (workoutType && caloriesBurned > 0) {
+                    const id = Date.now().toString(); // Simple unique ID
+                    state.workouts[id] = { type: workoutType, calories: caloriesBurned };
+                    workoutForm.reset();
                     saveData();
-                    typeInput.value = '';
-                    caloriesInput.value = '';
                 }
             });
+
+            // Workout Removal
             workoutList.addEventListener('click', (e) => {
                 if (e.target.closest('.remove-workout-btn')) {
-                    delete state.workouts[e.target.closest('.remove-workout-btn').dataset.id];
+                    const id = e.target.closest('.remove-workout-btn').getAttribute('data-id');
+                    delete state.workouts[id];
                     saveData();
                 }
             });
 
-            dateInput.addEventListener('change', () => {
-                state.currentDate = dateInput.value;
+            // BMR Change
+            bmrInput.addEventListener('change', saveBMR);
+            bmrInput.addEventListener('blur', saveBMR);
+
+            // Date navigation functions
+            function changeDate(days) {
+                const newDate = new Date(state.currentDate + 'T00:00:00');
+                newDate.setDate(newDate.getDate() + days);
+                state.currentDate = newDate.toISOString().split('T')[0];
+                loadDataAndListen(state.currentDate);
+            }
+
+            prevDayBtn.addEventListener('click', () => changeDate(-1));
+            nextDayBtn.addEventListener('click', () => changeDate(1));
+            dateInput.addEventListener('change', (e) => {
+                state.currentDate = e.target.value;
                 loadDataAndListen(state.currentDate);
             });
-            prevDayBtn.addEventListener('click', () => {
-                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() - 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-            });
-            nextDayBtn.addEventListener('click', () => {
-                const date = new Date(state.currentDate + 'T00:00:00'); date.setDate(date.getDate() + 1);
-                state.currentDate = date.toISOString().split('T')[0]; loadDataAndListen(state.currentDate);
-            });
 
-            // Modal Logic
-            addMealBtn.addEventListener('click', () => addMealModal.classList.remove('hidden'));
-            cancelAddMealBtn.addEventListener('click', () => { addMealModal.classList.add('hidden'); mealNameInput.value = ''; });
+            // Add Meal Modal Handlers
+            addMealBtn.addEventListener('click', () => {
+                mealNameInput.value = '';
+                addMealModal.classList.remove('hidden');
+            });
+            cancelAddMealBtn.addEventListener('click', () => {
+                addMealModal.classList.add('hidden');
+            });
             confirmAddMealBtn.addEventListener('click', () => {
                 const mealName = mealNameInput.value.trim();
-                if (mealName && !state.meals[mealName]) {
+                if (mealName && !state.meals.hasOwnProperty(mealName)) {
                     state.meals[mealName] = [];
-                    saveData();
                     addMealModal.classList.add('hidden');
-                    mealNameInput.value = '';
-                } else if (mealName) {
-                    alert('Meal section already exists or name is invalid.');
+                    saveData();
+                } else if (state.meals.hasOwnProperty(mealName)) {
+                    alert('A meal section with that name already exists.');
                 }
+            });
+
+            // Monthly Select Handlers (for future development)
+            monthSelect.addEventListener('change', (e) => {
+                state.selectedMonth = parseInt(e.target.value);
+                renderMonthlySummaryBar();
+            });
+            yearSelect.addEventListener('change', (e) => {
+                state.selectedYear = parseInt(e.target.value);
+                renderMonthlySummaryBar();
             });
         }
     </script>

@@ -620,7 +620,6 @@
                 });
             }
 
-            // ** START OF THE FIX **
             async function renderWeeklyChart() {
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
                 if (weeklyChartInstance) weeklyChartInstance.destroy();
@@ -702,7 +701,6 @@
                     } 
                 });
             }
-            // ** END OF THE FIX **
 
             async function renderMonthlySummaryBar() {
                 const year = state.selectedYear;

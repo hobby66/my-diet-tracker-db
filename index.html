@@ -63,19 +63,19 @@
     </div>
 
     <div id="app-content" class="container mx-auto p-4 md:p-8 max-w-6xl hidden">
-        <header class="text-center mb-8">
+        <header class="text-center **mb-6**">
             <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Diet & Workout Tracker</h1>
             <p class="text-lg text-gray-600 mt-2">Log your meals and exercises to achieve your calorie deficit goals.</p>
             <button id="sign-out-btn" class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition duration-300">Sign Out</button>
         </header>
 
-        <div id="date-selector" class="flex justify-center items-center mb-8 bg-white p-3 rounded-lg shadow-md max-w-md mx-auto">
+        <div id="date-selector" class="flex justify-center items-center **mb-6** bg-white p-3 rounded-lg shadow-md max-w-md mx-auto">
              <button id="prev-day" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">-</button>
              <input type="date" id="current-date" class="border-0 text-center text-lg font-semibold focus:ring-0">
              <button id="next-day" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">+</button>
         </div>
 
-                <section id="monthly-summary-bar" class="mb-8">
+                <section id="monthly-summary-bar" class="**mb-6**">
             <div class="bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold mb-4 text-center">Monthly Calorie Balance</h2>
                 <div class="flex justify-center items-center space-x-4 mb-6">
@@ -89,7 +89,7 @@
             </div>
         </section>
 
-        <section id="summary" class="mb-8">
+        <section id="summary" class="**mb-6**">
             <div class="summary-card bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold mb-4 text-center">Daily Summary</h2>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -110,13 +110,12 @@
                  </div>
             </div>
         </section>
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-2 space-y-6">
-                <div id="meal-container"></div>
+        
+                <div class="grid grid-cols-1 lg:grid-cols-3 **gap-6**">
+            <div class="lg:col-span-2 space-y-4">                 <div id="meal-container"></div>
                 <button id="add-meal-btn" class="w-full bg-blue-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-600 transition duration-300">+ Add Meal Section</button>
             </div>
-            <div class="space-y-6">
-                <div class="workout-card bg-white p-6 rounded-xl shadow-lg">
+            <div class="space-y-4">                 <div class="workout-card bg-white p-6 rounded-xl shadow-lg">
                     <h2 class="text-2xl font-bold mb-4">Workouts & BMR</h2>
                     <div class="mb-4">
                         <label for="bmr-input" class="block text-sm font-medium text-gray-700">Basal Metabolic Rate (BMR)</label>
@@ -138,13 +137,11 @@
                 </div>
             </div>
         </div>
-                <section id="charts" class="mt-8">
-            <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <div class="bg-white p-6 rounded-xl shadow-lg">
+                <section id="charts" class="**mt-6**">             <div class="grid grid-cols-1 xl:grid-cols-2 **gap-6**">                 <div class="bg-white p-6 rounded-xl shadow-lg">
                     <h2 class="text-2xl font-bold mb-4 text-center">Weekly Summary</h2>
                     <canvas id="weekly-chart"></canvas>
                 </div>
-                            </div>
+            </div>
         </section>
     </div>
 
@@ -399,7 +396,7 @@
                      `;
                 mealContainer.appendChild(card);
             });
-        }
+            }
 
         function renderWorkouts() {
             workoutList.innerHTML = '';
@@ -535,7 +532,7 @@
             if (e.target.classList.contains('meal-form')) {
                 e.preventDefault();
                 const form = e.target;
-                const mealName = form.dataset.mealName;
+                const mealName = form.dataset.meal-name;
                 const formData = new FormData(form);
 
                 const mealItem = {

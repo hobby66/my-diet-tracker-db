@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -312,7 +313,6 @@
             const monthlyNetEl = document.getElementById('monthly-net-calories');
             const monthlyStatusLabelEl = document.getElementById('monthly-status-label');
 
-
             let weeklyChartInstance = null;
             let macroChartInstance = null;
             const today = new Date();
@@ -449,7 +449,7 @@
                                 <div><input type="number" step="any" name="protein" placeholder="Protein (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
                                 <div><input type="number" step="any" name="carbs" placeholder="Carbs (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
                                 <div><input type="number" step="any" name="fat" placeholder="Fat (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
-                                <div><input type="number" step="any" name="sugar" placeholder="Sugar (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
+                                <div><input type="number" step="any" name="sugar" placeholder="Sugar (g)" class="block w/full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
                                 <div><input type="number" step="any" name="fiber" placeholder="Fiber (g)" class="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus-ring-primary"></div>
                             </div>
                             <button type="submit" class="w-full bg-blue-500 text-white font-bold py-2 px-3 rounded-lg hover:bg-blue-600 transition duration-300 mt-3">Log Item</button>
@@ -569,21 +569,22 @@
                 const datesRef = collection(db, 'users', userId, 'dates');
                 let current = new Date(state.currentDate + 'T00:00:00');
                 let dayOfWeek = current.getDay();
-                let diff = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+                let diff = (dayOfWeek === 0 ? -6 : -dayOfWeek + 1); // Adjust to start from Monday
                 let monday = new Date(current);
                 monday.setDate(monday.getDate() + diff);
                 let weekDates = [];
+                let labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 for (let i = 0; i < 7; i++) {
                     let d = new Date(monday);
-                    d.setDate(d.getDate() + i);
+                    d.setDate(monday.getDate() + i);
                     let dateStr = d.toISOString().split('T')[0];
-                    weekDates.push(dateStr);
+                    weekDates.push({ date: dateStr, label: labels[i] });
                 }
                 let netData = Array(7).fill(0);
                 for (let i = 0; i < 7; i++) {
-                    let date = weekDates[i];
+                    let date = weekDates[i].date;
                     if (date > state.currentDate) {
-                        netData[i] = null;
+                        netData[i] = null; // Set future dates to null
                         continue;
                     }
                     const docRef = doc(datesRef, date);
@@ -597,19 +598,19 @@
                         netData[i] = totalIn - totalOut;
                     }
                 }
-                return netData;
+                return { netData, labels };
             }
 
             async function renderWeeklyChart() {
-                const netData = await fetchWeeklyData();
+                const { netData, labels } = await fetchWeeklyData();
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
-                const backgroundColors = netData.map(value => value < 0 ? '#22c55e' : '#ef4444');
+                const backgroundColors = netData.map(value => value !== null && value < 0 ? '#22c55e' : '#ef4444');
                 if (weeklyChartInstance) { weeklyChartInstance.destroy(); }
                 weeklyChartInstance = new Chart(ctx, {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
-                        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                        labels: labels,
                         datasets: [{
                             label: 'Net Calories',
                             data: netData,
@@ -626,7 +627,9 @@
                                     return context.dataset.data[context.dataIndex] >= 0 ? 'top' : 'bottom';
                                 },
                                 offset: 8,
-                                formatter: Math.round,
+                                formatter: function(value) {
+                                    return value !== null ? Math.round(value) : '';
+                                },
                                 font: { weight: 'bold' }
                             }
                         }
@@ -778,3 +781,4 @@
     </script>
 </body>
 </html>
+```

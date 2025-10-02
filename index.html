@@ -582,6 +582,10 @@
                 let netData = Array(7).fill(0);
                 for (let i = 0; i < 7; i++) {
                     let date = weekDates[i];
+                    if (date > state.currentDate) {
+                        netData[i] = null;
+                        continue;
+                    }
                     const docRef = doc(datesRef, date);
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {

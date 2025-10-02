@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
         /* Define a custom color for the theme (Blue) */
         :root { --color-primary: #3b82f6; /* blue-500 */ }
@@ -564,23 +565,63 @@
                 else { monthlyNetEl.classList.add('text-gray-800'); }
             }
 
-            function renderWeeklyChart() {
-                // Placeholder for weekly chart logic - requires weekly data fetch 
+            async function fetchWeeklyData() {
+                const datesRef = collection(db, 'users', userId, 'dates');
+                let current = new Date(state.currentDate + 'T00:00:00');
+                let dayOfWeek = current.getDay();
+                let diff = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+                let monday = new Date(current);
+                monday.setDate(monday.getDate() + diff);
+                let weekDates = [];
+                for (let i = 0; i < 7; i++) {
+                    let d = new Date(monday);
+                    d.setDate(d.getDate() + i);
+                    let dateStr = d.toISOString().split('T')[0];
+                    weekDates.push(dateStr);
+                }
+                let netData = Array(7).fill(0);
+                for (let i = 0; i < 7; i++) {
+                    let date = weekDates[i];
+                    const docRef = doc(datesRef, date);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        let totalIn = 0;
+                        Object.values(data.meals || {}).flat().forEach(item => totalIn += Number(item.calories) || 0);
+                        let totalOut = state.bmr || 0;
+                        Object.values(data.workouts || {}).forEach(w => totalOut += Number(w.calories) || 0);
+                        netData[i] = totalIn - totalOut;
+                    }
+                }
+                return netData;
+            }
+
+            async function renderWeeklyChart() {
+                const netData = await fetchWeeklyData();
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
                 if (weeklyChartInstance) { weeklyChartInstance.destroy(); }
                 weeklyChartInstance = new Chart(ctx, {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                         datasets: [{
                             label: 'Net Calories',
-                            data: [0, 0, 0, 0, 0, 0, 0], // Placeholder data
+                            data: netData,
                             backgroundColor: primaryColor,
                         }]
                     },
                     options: {
                         responsive: true,
-                        scales: { y: { beginAtZero: true } }
+                        scales: { y: { beginAtZero: true } },
+                        plugins: {
+                            datalabels: {
+                                anchor: 'end',
+                                align: 'top',
+                                formatter: Math.round,
+                                font: { weight: 'bold' }
+                            }
+                        }
                     }
                 });
 

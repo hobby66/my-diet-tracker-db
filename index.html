@@ -599,6 +599,7 @@
             async function renderWeeklyChart() {
                 const netData = await fetchWeeklyData();
                 const ctx = document.getElementById('weekly-chart').getContext('2d');
+                const backgroundColors = netData.map(value => value < 0 ? '#22c55e' : '#ef4444');
                 if (weeklyChartInstance) { weeklyChartInstance.destroy(); }
                 weeklyChartInstance = new Chart(ctx, {
                     type: 'bar',
@@ -608,7 +609,7 @@
                         datasets: [{
                             label: 'Net Calories',
                             data: netData,
-                            backgroundColor: primaryColor,
+                            backgroundColor: backgroundColors,
                         }]
                     },
                     options: {
@@ -617,7 +618,10 @@
                         plugins: {
                             datalabels: {
                                 anchor: 'end',
-                                align: 'top',
+                                align: function(context) {
+                                    return context.dataset.data[context.dataIndex] >= 0 ? 'top' : 'bottom';
+                                },
+                                offset: 8,
                                 formatter: Math.round,
                                 font: { weight: 'bold' }
                             }
